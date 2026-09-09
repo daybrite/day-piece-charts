@@ -790,22 +790,38 @@ fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
 /// The two f64s compare by bit pattern rather than by value: they come from the same arithmetic on
 /// the same inputs for every mark in a series, so equal values are bit-equal, and a NaN radius
 /// (which `==` would never match, splitting a group per datum) lands in one group instead.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 struct PointLook {
     symbol: Symbol,
-    radius: u64,
-    width: u64,
-    color: [u8; 4],
+    radius: f64,
+    width: f64,
+    color: Color,
+}
+
+impl PartialEq for PointLook {
+    fn eq(&self, other: &Self) -> bool {
+        // Bit patterns, not values: every mark in a series reaches these through the same
+        // arithmetic on the same inputs, so equal values are bit-equal — and a degenerate NaN
+        // radius groups with itself instead of splitting the batch one op per datum, which is
+        // exactly the case `==` would get wrong.
+        let bits = |a: f64, b: f64| a.to_bits() == b.to_bits();
+        self.symbol == other.symbol
+            && bits(self.radius, other.radius)
+            && bits(self.width, other.width)
+            && bits(self.color.r, other.color.r)
+            && bits(self.color.g, other.color.g)
+            && bits(self.color.b, other.color.b)
+            && bits(self.color.a, other.color.a)
+    }
 }
 
 impl PointLook {
     fn new(symbol: Symbol, radius: f64, width: f64, color: Color) -> Self {
-        let c = |v: f64| (v.clamp(0.0, 1.0) * 255.0) as u8;
         PointLook {
             symbol,
-            radius: radius.to_bits(),
-            width: width.to_bits(),
-            color: [c(color.r), c(color.g), c(color.b), c(color.a)],
+            radius,
+            width,
+            color,
         }
     }
 }
@@ -858,8 +874,14 @@ fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
     };
     let up = -std::f64::consts::FRAC_PI_2;
     match sym {
-        Symbol::Circle => (vec![Shape::Ellipse(Rect::new(-r, -r, r * 2.0, r * 2.0))], vec![]),
-        Symbol::Square => (vec![Shape::Rect(Rect::new(-r, -r, r * 2.0, r * 2.0))], vec![]),
+        Symbol::Circle => (
+            vec![Shape::Ellipse(Rect::new(-r, -r, r * 2.0, r * 2.0))],
+            vec![],
+        ),
+        Symbol::Square => (
+            vec![Shape::Rect(Rect::new(-r, -r, r * 2.0, r * 2.0))],
+            vec![],
+        ),
         Symbol::Triangle => (vec![poly(3, up)], vec![]),
         Symbol::Diamond => (vec![poly(4, up)], vec![]),
         Symbol::Pentagon => (vec![poly(5, up)], vec![]),
