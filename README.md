@@ -100,7 +100,7 @@ native chart control on any platform to delegate to.
 
 | This crate | Tested against day | Toolkits |
 |---|---|---|
-| 0.4 | 0.4 (`main` at the revision in `demo/Cargo.lock`) | every target Day draws a canvas on |
+| 0.4 | 0.4 (`main`, at its newest revision on every CI run) | every target Day draws a canvas on |
 
 Every day dependency names the bare canonical URL with no branch or tag, and your app's
 `Cargo.lock` picks one day revision for the whole graph. Cargo unifies a git dependency only when

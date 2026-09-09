@@ -195,11 +195,29 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     for (kind, si) in connected.iter().filter(|(k, _)| *k == MarkKind::Line) {
         connected_path(d, r, paint, *kind, *si);
     }
+    // Point marks are BATCHED: every datum sharing a symbol, a size, a color and a stroke width
+    // is one stamp rather than one op each (docs/canvas.md "Stamping"). A scatter is the case the
+    // batched op exists for — fifty thousand points drawn individually are fifty thousand ops to
+    // build, compare and clone on every frame that re-records, and a scatter re-records whenever
+    // any control moves. Grouped, it is one op per distinct appearance, which for a chart is one
+    // per series.
+    //
+    // Insertion order is preserved so the z-order `order` established still holds between groups;
+    // within a group every mark looks identical, so their relative order cannot be seen.
+    let mut groups: Vec<(PointLook, Vec<Point>)> = Vec::new();
     for i in &order {
         let p = &r.marks[*i];
-        if p.mark.kind == MarkKind::Point {
-            point_mark(d, r, paint, p);
+        if p.mark.kind == MarkKind::Point
+            && let Some((look, at)) = point_mark(r, paint, p)
+        {
+            match groups.iter_mut().find(|(l, _)| *l == look) {
+                Some((_, pts)) => pts.push(at),
+                None => groups.push((look, vec![at])),
+            }
         }
+    }
+    for (look, at) in groups {
+        draw_symbols(d, look.symbol, at, look.radius, look.color, look.width);
     }
     if clip {
         d.restore();
@@ -766,11 +784,36 @@ fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
     out
 }
 
-fn point_mark(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
-    let Some(x) = center_x(p, r) else { return };
-    let Some(y) = r.y.project(&Datum::Number(p.v1)) else {
-        return;
-    };
+/// Everything about a point mark's APPEARANCE — two marks agreeing on all of it are
+/// indistinguishable, which is what lets them share one stamp.
+///
+/// The two f64s compare by bit pattern rather than by value: they come from the same arithmetic on
+/// the same inputs for every mark in a series, so equal values are bit-equal, and a NaN radius
+/// (which `==` would never match, splitting a group per datum) lands in one group instead.
+#[derive(Clone, Copy, PartialEq)]
+struct PointLook {
+    symbol: Symbol,
+    radius: u64,
+    width: u64,
+    color: [u8; 4],
+}
+
+impl PointLook {
+    fn new(symbol: Symbol, radius: f64, width: f64, color: Color) -> Self {
+        let c = |v: f64| (v.clamp(0.0, 1.0) * 255.0) as u8;
+        PointLook {
+            symbol,
+            radius: radius.to_bits(),
+            width: width.to_bits(),
+            color: [c(color.r), c(color.g), c(color.b), c(color.a)],
+        }
+    }
+}
+
+/// Where one point mark goes and what it looks like, or `None` if it does not project.
+fn point_mark(r: &Resolved, paint: &Paint2<'_>, p: &Placed) -> Option<(PointLook, Point)> {
+    let x = center_x(p, r)?;
+    let y = r.y.project(&Datum::Number(p.v1))?;
     let at = device(
         r,
         x + p.mark.offset.0,
@@ -788,75 +831,78 @@ fn point_mark(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     // symbol_size is an AREA, so the radius is its square root — the encoding is only honest if
     // twice the value is twice the ink.
     let radius = (p.mark.style.symbol_size / std::f64::consts::PI).sqrt();
-    draw_symbol(d, sym, at, radius, color, p.mark.style.line_width.max(1.5));
+    Some((
+        PointLook::new(sym, radius, p.mark.style.line_width.max(1.5), color),
+        at,
+    ))
 }
 
 fn circle(at: Point, r: f64) -> Shape {
     Shape::Ellipse(Rect::new(at.x - r, at.y - r, r * 2.0, r * 2.0))
 }
 
-fn draw_symbol(d: &mut Draw, sym: Symbol, at: Point, r: f64, color: Color, w: f64) {
+/// A symbol's geometry, authored around the ORIGIN: the shapes it fills and the shapes it strokes.
+///
+/// Around the origin rather than at a point, because that is what a [`Draw::stamp`] template is —
+/// one symbol becomes one op however many data points wear it (docs/canvas.md "Stamping").
+fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
     let poly = |n: usize, rot: f64| {
-        let pts: Vec<Point> = (0..n)
-            .map(|i| {
-                let a = rot + i as f64 * std::f64::consts::TAU / n as f64;
-                Point::new(at.x + r * a.cos(), at.y + r * a.sin())
-            })
-            .collect();
-        Shape::Polygon(pts)
+        Shape::Polygon(
+            (0..n)
+                .map(|i| {
+                    let a = rot + i as f64 * std::f64::consts::TAU / n as f64;
+                    Point::new(r * a.cos(), r * a.sin())
+                })
+                .collect(),
+        )
     };
+    let up = -std::f64::consts::FRAC_PI_2;
     match sym {
-        Symbol::Circle => d.fill(circle(at, r), color),
-        Symbol::Square => d.fill(
-            Shape::Rect(Rect::new(at.x - r, at.y - r, r * 2.0, r * 2.0)),
-            color,
+        Symbol::Circle => (vec![Shape::Ellipse(Rect::new(-r, -r, r * 2.0, r * 2.0))], vec![]),
+        Symbol::Square => (vec![Shape::Rect(Rect::new(-r, -r, r * 2.0, r * 2.0))], vec![]),
+        Symbol::Triangle => (vec![poly(3, up)], vec![]),
+        Symbol::Diamond => (vec![poly(4, up)], vec![]),
+        Symbol::Pentagon => (vec![poly(5, up)], vec![]),
+        Symbol::Cross => (
+            vec![],
+            vec![
+                Shape::Line(Point::new(-r, -r), Point::new(r, r)),
+                Shape::Line(Point::new(-r, r), Point::new(r, -r)),
+            ],
         ),
-        Symbol::Triangle => d.fill(poly(3, -std::f64::consts::FRAC_PI_2), color),
-        Symbol::Diamond => d.fill(poly(4, -std::f64::consts::FRAC_PI_2), color),
-        Symbol::Pentagon => d.fill(poly(5, -std::f64::consts::FRAC_PI_2), color),
-        Symbol::Cross => {
-            d.stroke(
-                Shape::Line(
-                    Point::new(at.x - r, at.y - r),
-                    Point::new(at.x + r, at.y + r),
-                ),
-                color,
-                w,
-            );
-            d.stroke(
-                Shape::Line(
-                    Point::new(at.x - r, at.y + r),
-                    Point::new(at.x + r, at.y - r),
-                ),
-                color,
-                w,
-            );
-        }
-        Symbol::Plus => {
-            d.stroke(
-                Shape::Line(Point::new(at.x - r, at.y), Point::new(at.x + r, at.y)),
-                color,
-                w,
-            );
-            d.stroke(
-                Shape::Line(Point::new(at.x, at.y - r), Point::new(at.x, at.y + r)),
-                color,
-                w,
-            );
-        }
-        Symbol::Asterisk => {
-            for i in 0..3 {
-                let a = i as f64 * std::f64::consts::PI / 3.0;
-                d.stroke(
+        Symbol::Plus => (
+            vec![],
+            vec![
+                Shape::Line(Point::new(-r, 0.0), Point::new(r, 0.0)),
+                Shape::Line(Point::new(0.0, -r), Point::new(0.0, r)),
+            ],
+        ),
+        Symbol::Asterisk => (
+            vec![],
+            (0..3)
+                .map(|i| {
+                    let a = i as f64 * std::f64::consts::PI / 3.0;
                     Shape::Line(
-                        Point::new(at.x - r * a.cos(), at.y - r * a.sin()),
-                        Point::new(at.x + r * a.cos(), at.y + r * a.sin()),
-                    ),
-                    color,
-                    w,
-                );
-            }
-        }
+                        Point::new(-r * a.cos(), -r * a.sin()),
+                        Point::new(r * a.cos(), r * a.sin()),
+                    )
+                })
+                .collect(),
+        ),
+    }
+}
+
+/// One symbol at every one of `at` — a stamp per part, whatever the count.
+fn draw_symbols(d: &mut Draw, sym: Symbol, at: Vec<Point>, r: f64, color: Color, w: f64) {
+    if at.is_empty() {
+        return;
+    }
+    let (filled, stroked) = symbol_parts(sym, r);
+    for shape in filled {
+        d.stamp(shape, at.clone(), color);
+    }
+    for shape in stroked {
+        d.stamp_styled(shape, at.clone(), color, StrokeStyle::width(w));
     }
 }
 
