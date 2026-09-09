@@ -1,0 +1,94 @@
+name: ci
+
+# Four questions, answered on every push and once a day:
+#   host         does the crate build, lint, and pass its host tests (the grammar arithmetic)?
+#   portability  does it compile for the targets it claims to draw the same on?
+#   demo         does the walkthrough pass on the iOS Simulator and the Android emulator, at the
+#                day revision demo/Cargo.lock pins?
+#   canary       …and at day's newest main? Allowed to fail; must be seen.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Daily: day's main moves on weeks nobody pushes here, and the canvas duties this crate draws
+    # through are the ones most likely to move under it.
+    - cron: "0 5 * * *"
+
+permissions:
+  contents: write # release-asset upload on tag builds
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      # tests/grammar.rs: tick selection, scale geometry, the position adjustments and the
+      # monotone spline's no-overshoot guarantee — the same search dayscript/charts.yaml reads
+      # back on device, asserted here in depth and without a toolkit.
+      - run: cargo test --locked
+
+  # This crate has no native half: every chart is a `Draw` display list, so there is no per-toolkit
+  # code and no backend features to check. What is worth proving instead is the claim the README
+  # makes — that the same crate compiles everywhere the display list is replayed. wasm32 is the
+  # one that actually catches things, because it is where a stray `std::time` or a thread-local
+  # stops being portable.
+  portability:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: aarch64-apple-ios-sim }
+          - { os: ubuntu-latest, target: aarch64-linux-android }
+          - { os: ubuntu-latest, target: wasm32-unknown-unknown }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo clippy --locked --target ${{ matrix.target }} -- -D warnings
+
+  # The proof: the demo app, driven end to end on both platforms by the shared Day workflow. It
+  # builds with the day revision demo/Cargo.lock pins, runs dayscript/charts.yaml, and fails on a
+  # failed assertion or a blank capture. The plot itself is a canvas, so the assertions read the
+  # domain and the tick labelling the chart derives before drawing, and the screenshots carry the
+  # drawing. Captures are uploaded per target, and a tag build attaches them to the release.
+  demo:
+    uses: daybrite/actions/.github/workflows/dayapp.yml@main
+    secrets: inherit
+    with:
+      project-path: demo
+      targets: ios-uikit, android-mdc
+      # The CLI that builds; the framework revision itself comes from demo/Cargo.lock.
+      day-version: main
+      scripts: dayscript/charts.yaml
+      preflight-checks: fmt, clippy, test
+      ios-devices: |
+        device=iPhone, orientation=portrait
+      android-devices: |
+        device=pixel_7,     os=36, orientation=portrait
+
+  # Tomorrow's day: the same run after `cargo update` moves the demo's lock to day's newest main.
+  # Not required to pass — the crate declares which day it was tested against — but a red canary
+  # is the first word that a retag is due, so it runs on every push as well as the daily schedule.
+  canary:
+    if: github.event_name != 'pull_request'
+    uses: daybrite/actions/.github/workflows/dayapp.yml@main
+    secrets: inherit
+    with:
+      project-path: demo
+      targets: ios-uikit, android-mdc
+      day-version: main
+      setup-command: cd demo && cargo update
+      scripts: dayscript/charts.yaml
+      artifact-prefix: canary-
+      ios-devices: |
+        device=iPhone, orientation=portrait
+      android-devices: |
+        device=pixel_7,     os=36, orientation=portrait

@@ -5,6 +5,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # day-piece-charts
 
+[![ci](https://github.com/daybrite/day-piece-charts/actions/workflows/ci.yml/badge.svg)](https://github.com/daybrite/day-piece-charts/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MPL--2.0-green.svg)](LICENSE)
+
 Charts for [Day](https://daybrite.dev) apps: a grammar-of-graphics API drawn on the canvas.
 
 ```rust
@@ -80,6 +83,46 @@ Every chart is recorded as a `Draw` display list and replayed by whichever backe
 so this crate has no per-toolkit code and no backend features. A chart looks the same on all nine
 targets because it *is* the same. The cost is that it draws rather than delegating: there is no
 native chart control on any platform to delegate to.
+
+## Compatibility
+
+| This crate | Tested against day | Toolkits |
+|---|---|---|
+| 0.4 | 0.4 (`main` at the revision in `demo/Cargo.lock`) | every target Day draws a canvas on |
+
+Every day dependency names the bare canonical URL with no branch or tag, and your app's
+`Cargo.lock` picks one day revision for the whole graph. Cargo unifies a git dependency only when
+URL and ref match, so a crate that pinned a tag would double every day crate in an app on `main`.
+`[package.metadata.day] compat = "0.4"` records the minor this release was tested against, and
+`day build` notes a mismatch before compiling.
+
+To build against a fork of day, patch the canonical URL once in your app and this crate follows:
+
+```sh
+day patch --git https://github.com/acme/day.git@acme
+```
+
+## Develop it
+
+```sh
+cargo test                                            # the grammar arithmetic, on the host
+cd demo && day launch -p ios-uikit --script dayscript/charts.yaml
+cd demo && day launch -p android-mdc --script dayscript/charts.yaml
+```
+
+The [demo app](demo/) depends on this crate by path and draws the same two series four ways —
+grouped bars, monotone lines, a stack, and a donut. Its walkthrough asserts what the chart derives
+before it draws, since a canvas has no text for a script to read, and captures the drawing as
+screenshots. CI runs it on the iOS Simulator and the Android emulator on every push, and daily
+against day's newest `main`. To work against a local day checkout, `day patch --local ../day` in
+either directory writes a gitignored patch table.
+
+CI also compiles the crate for `aarch64-apple-ios-sim`, `aarch64-linux-android` and
+`wasm32-unknown-unknown` on every push, which is what keeps the "same on every target" claim
+above honest.
+
+Extending Day is documented at
+[daybrite.dev/docs/extending](https://daybrite.dev/docs/extending).
 
 ## Part of Day
 

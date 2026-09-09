@@ -1,0 +1,68 @@
+# The demo's walkthrough (https://daybrite.dev/docs/dayscript), and the crate's on-device test:
+# it runs on the iOS Simulator and the Android emulator in CI, and the same command runs it here.
+#
+#     day launch -p ios-uikit --script dayscript/charts.yaml
+#     day launch -p android-mdc --script dayscript/charts.yaml
+#
+# A chart is drawn on the canvas, so nothing here reads the plot itself — the screenshots are what
+# show it. What the assertions read is the arithmetic the chart runs before it draws: the domain
+# `resolve::domain_of` infers and the labelling the extended-Wilkinson search picks, answered
+# INSIDE the device build. tests/grammar.rs asserts the same search on the host.
+name: charts
+description: Switch between the four compositions, change how much data is plotted, and read back what the pipeline derives.
+flow:
+  - wait_for: { id: charts-plot }
+  - assert_visible: { id: charts-plot }
+
+  # Six months of two regions, as grouped bars: 12 marks, values from 8 to 28, and the tick
+  # search settles on 10/15/20/25/30 — five labels a step of five apart.
+  - assert_text: { id: charts-grammar, text: "bar, dodged by Region" }
+  - assert_text: { id: charts-marks, text: "12" }
+  - assert_text: { id: charts-series, text: "North, South" }
+  - assert_text: { id: charts-domain, text: "8 – 28" }
+  - assert_text: { id: charts-ticks, text: "5 labels, step 5" }
+  - assert_text: { id: charts-months-value, text: "6" }
+  - screenshot: charts-grouped
+
+  # The same data, recomposed. Only the marks closure changes, so the domain and the ticks hold
+  # while the grammar and the drawing do not.
+  - select: { id: charts-composition-picker, index: 1 }
+  - assert_text: { id: charts-grammar, text: "line, monotone" }
+  - assert_text: { id: charts-marks, text: "12" }
+  - assert_text: { id: charts-domain, text: "8 – 28" }
+  - screenshot: charts-line
+
+  - select: { id: charts-composition-picker, index: 2 }
+  - assert_text: { id: charts-grammar, text: "bar, stacked" }
+  - assert_text: { id: charts-marks, text: "12" }
+  - screenshot: charts-stacked
+
+  # The donut is the polar arm of the `when`: a different chart, because the coordinate system is
+  # a property of the chart. Each region collapses to one wedge, so the mark count drops to two.
+  - select: { id: charts-composition-picker, index: 3 }
+  - assert_text: { id: charts-grammar, text: "sector, polar" }
+  - assert_text: { id: charts-marks, text: "2" }
+  - screenshot: charts-donut
+
+  # Back to Cartesian, then move the data itself. The slider holds 6, so both moves below are
+  # real changes rather than same-value sets.
+  - select: { id: charts-composition-picker, index: 0 }
+  - assert_text: { id: charts-marks, text: "12" }
+
+  # A full year: 24 marks, the domain reaches December's 47, and the search re-labels in tens
+  # rather than fives because the same axis now has a wider range to cover.
+  - set_value: { id: charts-months, value: 12.0 }
+  - assert_text: { id: charts-months-value, text: "12" }
+  - assert_text: { id: charts-marks, text: "24" }
+  - assert_text: { id: charts-domain, text: "8 – 47" }
+  - assert_text: { id: charts-ticks, text: "5 labels, step 10" }
+  - screenshot: charts-year
+
+  # A quarter: the range narrows to 8–18 and the step drops to two, which is the tick search
+  # following its data rather than dividing by a constant.
+  - set_value: { id: charts-months, value: 3.0 }
+  - assert_text: { id: charts-months-value, text: "3" }
+  - assert_text: { id: charts-marks, text: "6" }
+  - assert_text: { id: charts-domain, text: "8 – 18" }
+  - assert_text: { id: charts-ticks, text: "6 labels, step 2" }
+  - screenshot: charts-quarter

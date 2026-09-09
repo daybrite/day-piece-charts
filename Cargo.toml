@@ -1,0 +1,36 @@
+[package]
+name = "day-piece-charts"
+version = "0.4.2"
+edition = "2024"
+rust-version = "1.89"
+description = "A grammar-of-graphics charting piece for Day apps, drawn on the canvas"
+repository = "https://github.com/daybrite/day-piece-charts"
+license = "MPL-2.0"
+# The day framework crates are not on crates.io yet; neither is this one. Apps depend on it
+# from git, exactly as they depend on day.
+publish = false
+
+# An EXTERNAL Day Piece (https://daybrite.dev/docs/extending) with NO native half. Every chart is
+# recorded as a `Draw` display list and replayed by whatever backend the app runs on, so this crate
+# carries no per-toolkit code, no `[features]` for backends, and no `[package.metadata.day.piece]`
+# `backends` entry — the same shape day-piece-colorpicker's composed idiom has inside day. One
+# consequence worth stating: a chart looks identical on all nine targets, because it IS identical.
+#
+# Every day dependency names the BARE canonical URL — no branch, tag, or rev. Cargo unifies a git
+# dependency only when URL and ref match, so an app on `git = "…/day.git"` and a piece pinned to a
+# tag would carry two copies of every day crate; leaving the ref off lets the app's Cargo.lock
+# choose one revision for the whole graph.
+
+[package.metadata.day]
+# The day minor this release is built and tested against. `day build` notes a mismatch.
+compat = "0.4"
+
+[dependencies]
+day-spec = { git = "https://github.com/daybrite/day.git" }
+day-core = { git = "https://github.com/daybrite/day.git" }
+day-pieces = { git = "https://github.com/daybrite/day.git" }
+day-reactive = { git = "https://github.com/daybrite/day.git" }
+day-geometry = { git = "https://github.com/daybrite/day.git" }
+
+[dev-dependencies]
+day-mock = { git = "https://github.com/daybrite/day.git" }
