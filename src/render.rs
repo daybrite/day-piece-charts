@@ -100,7 +100,7 @@ fn band_of(p: &Placed, r: &Resolved) -> f64 {
     p.mark.width.resolve(slot)
 }
 
-/// The centre of a mark along x, in device points, offset into its dodging slot.
+/// The center of a mark along x, in device points, offset into its dodging slot.
 fn center_x(p: &Placed, r: &Resolved) -> Option<f64> {
     let base = r.x.project(&p.mark.x.as_ref()?.datum)?;
     if p.dodge_count <= 1 {
@@ -256,7 +256,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let line_h = m.height;
     // How far a tick label's line box must shift up so its CAP box straddles the gridline instead.
     // An axis label is digits, which use none of the descender room the line box reserves, so
-    // centring by the line box sits every label visibly low — half the difference between the
+    // centering by the line box sits every label visibly low — half the difference between the
     // descent and nothing. The cap middle sits `ascent - cap/2` below the line box top, and the
     // line middle at `height/2`; the gap between them is the correction.
     let cap_lift = m.height / 2.0 - (m.ascent - m.cap_height / 2.0);
@@ -379,10 +379,10 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 );
             }
             if paint.y_axis.labels {
-                // Aligned against the axis and centred on the tick. The anchor says that
+                // Aligned against the axis and centered on the tick. The anchor says that
                 // outright, so nothing here has to measure the label first — the backend already
                 // holds the width it is about to draw with (docs/canvas.md "Text"). The lift is
-                // what turns "centred line box" into "centred digits".
+                // what turns "centered line box" into "centered digits".
                 d.text(
                     &t.label,
                     Point::new(x + 8.0 * away, y - cap_lift),
@@ -443,7 +443,7 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     }
     let Some(cx) = center_x(p, r) else { return };
     let (top, bottom) = if r.y.kind.is_discrete() {
-        // A categorical y — a heat map's rows: the cell is centred on its band, as tall as the
+        // A categorical y — a heat map's rows: the cell is centered on its band, as tall as the
         // band less the mark's own height dimension.
         let Some(cy) = p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum)) else {
             return;
@@ -464,7 +464,7 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         (y0.min(y1), y0.max(y1))
     };
     // An explicit x span — a histogram bin, a Gantt bar — is the rectangle's own edges; without
-    // one the mark is centred on its position and as wide as its band.
+    // one the mark is centered on its position and as wide as its band.
     let (left, right) = match (&p.mark.x, &p.mark.x_end) {
         (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
             (Some(a), Some(b)) => (a.min(b), a.max(b)),
@@ -934,7 +934,7 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let outer = r_max * p.mark.outer_radius;
     let inner = (r_max * hole).max(r_max * p.mark.inner_radius);
     // The inset is an arc LENGTH, so converting it to an angle depends on the radius; using the
-    // outer radius keeps the visible gap even rather than tapering toward the centre.
+    // outer radius keeps the visible gap even rather than tapering toward the center.
     let inset = if outer > 0.0 {
         p.mark.angular_inset / outer
     } else {

@@ -414,7 +414,7 @@ fn draw_legend(
             TextStyle {
                 size: label_size,
                 color,
-                // Centred on the same line the swatch is centred on. With a top anchor this sat
+                // Centered on the same line the swatch is centered on. With a top anchor this sat
                 // half a line low, because the point given is the ROW's middle, not the text's
                 // top — the kind of off-by-a-half-line only the anchor can state away.
                 anchor: TextAnchor {
