@@ -80,7 +80,6 @@ dependencies = [
 [[package]]
 name = "day-core"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "anstream",
  "anstyle",
@@ -95,17 +94,14 @@ dependencies = [
 [[package]]
 name = "day-fonts"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 
 [[package]]
 name = "day-geometry"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 
 [[package]]
 name = "day-l10n"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-reactive",
  "fluent-bundle",
@@ -125,7 +121,6 @@ dependencies = [
 [[package]]
 name = "day-mock"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-spec",
 ]
@@ -145,7 +140,6 @@ dependencies = [
 [[package]]
 name = "day-pieces"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-core",
  "day-geometry",
@@ -159,7 +153,6 @@ dependencies = [
 [[package]]
 name = "day-reactive"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "log",
  "slotmap",
@@ -168,7 +161,6 @@ dependencies = [
 [[package]]
 name = "day-spec"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-fonts",
  "day-geometry",

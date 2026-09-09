@@ -16,8 +16,8 @@
 use day::prelude::*;
 use day_piece_charts::ticks::{self, LabelFit};
 use day_piece_charts::{
-    Coordinate, Datum, Interpolation, Interval, LegendPosition, Mark, Stacking, bar, chart,
-    resolve, sector, value,
+    AnnotationPosition, Coordinate, Datum, Interpolation, Interval, LegendPosition, Mark, Stacking,
+    bar, chart, rect, resolve, sector, sequential, value,
 };
 
 // The mobile entry point; a plain cargo desktop build enters through src/main.rs.
@@ -63,14 +63,20 @@ enum Composition {
     Stacked,
     /// The same stack in polar coordinates, which is a donut.
     Donut,
+    /// One cell per region per month, colored by revenue: both axes categorical.
+    HeatMap,
 }
 
-const COMPOSITIONS: [Composition; 4] = [
+const COMPOSITIONS: [Composition; 5] = [
     Composition::Grouped,
     Composition::Line,
     Composition::Stacked,
     Composition::Donut,
+    Composition::HeatMap,
 ];
+
+/// The largest value in the data, which is the top of the heat map's ramp.
+const PEAK: f64 = 47.0;
 
 /// The picker's selection, clamped so a stale index never panics.
 fn composition(index: usize) -> Composition {
@@ -114,19 +120,27 @@ pub fn root() -> impl Piece {
                     res::str::comp_line().format(),
                     res::str::comp_stacked().format(),
                     res::str::comp_donut().format(),
+                    res::str::comp_heatmap().format(),
                 ],
                 picked,
             )
             .id("charts-composition-picker"),
         ),
         // A donut needs polar coordinates, and the coordinate system is a property of the chart
-        // rather than of its marks — so the two live in two subtrees and `when` swaps between
-        // them. Everything Cartesian shares one chart and differs only in the marks it records.
+        // rather than of its marks — so it lives in its own subtree and `when` swaps to it. The
+        // heat map is Cartesian but titles its y axis by the row column rather than by revenue,
+        // so it is a third subtree; the rest share one chart and differ only in the marks.
         column((when(
             move || composition(picked.get()) == Composition::Donut,
             move || donut(months),
         )
-        .otherwise(move || cartesian(picked, months)),))
+        .otherwise(move || {
+            when(
+                move || composition(picked.get()) == Composition::HeatMap,
+                move || heat_map(months),
+            )
+            .otherwise(move || cartesian(picked, months))
+        }),))
         .align(HAlign::Center)
         .grow_w(),
         readout(picked, months),
@@ -179,6 +193,36 @@ fn donut(months: Signal<f64>) -> impl Piece {
     .frame(320.0, 220.0)
 }
 
+/// The same numbers as a grid: months across, regions down, revenue as the cell's color on the
+/// sequential ramp — the composition where BOTH axes are bands, which is what a rect mark with
+/// a categorical y asks for. Every cell also prints its value, in white on the dark end of the
+/// ramp and in the label color on the light end, because no one color reads on both.
+fn heat_map(months: Signal<f64>) -> impl Piece {
+    chart(move || {
+        let n = month_count(months.get());
+        let mut out = Vec::with_capacity(SERIES.len() * n);
+        for (region, values) in SERIES.iter() {
+            for (month, v) in MONTHS.iter().zip(values.iter()).take(n) {
+                let t = v / PEAK;
+                out.push(
+                    rect(value("Month", *month), value("Region", *region))
+                        .foreground(sequential(t))
+                        .annotation(AnnotationPosition::Overlay, number(*v))
+                        .annotation_color(if t < 0.6 {
+                            Color::WHITE
+                        } else {
+                            Color::rgba(0.0, 0.0, 0.0, 0.75)
+                        }),
+                );
+            }
+        }
+        out
+    })
+    .no_grid()
+    .id("charts-plot")
+    .frame(320.0, 220.0)
+}
+
 /// One mark per region per month, assembled the way the picked composition asks for.
 fn marks(comp: Composition, n: usize) -> Vec<Mark> {
     let mut out = Vec::with_capacity(SERIES.len() * n);
@@ -200,9 +244,11 @@ fn marks(comp: Composition, n: usize) -> Vec<Mark> {
                 // `line` is qualified because `day::prelude` exports a `line` shape of its own.
                 // Monotone interpolation is the honest curve for revenue: it cannot dip below a
                 // value the data never took.
-                Composition::Line | Composition::Donut => day_piece_charts::line(x, y)
-                    .by_series(series)
-                    .interpolation(Interpolation::Monotone),
+                Composition::Line | Composition::Donut | Composition::HeatMap => {
+                    { day_piece_charts::line(x, y) }
+                        .by_series(series)
+                        .interpolation(Interpolation::Monotone)
+                }
             });
         }
     }
@@ -259,6 +305,7 @@ fn grammar(comp: Composition) -> String {
         Composition::Line => "line, monotone",
         Composition::Stacked => "bar, stacked",
         Composition::Donut => "sector, polar",
+        Composition::HeatMap => "rect, colored by Revenue",
     }
     .to_string()
 }

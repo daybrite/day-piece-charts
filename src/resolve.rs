@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 use day_spec::{Color, Rect, Size};
 
-use crate::axis::AxisSpec;
+use crate::axis::{AxisPosition, AxisSpec};
 use crate::coord::Coordinate;
 use crate::data::{Datum, Interval};
 use crate::layout::Insets;
@@ -57,6 +57,10 @@ pub struct Resolved {
     /// Titles resolved from the data columns when the app named none.
     pub x_title: Option<String>,
     pub y_title: Option<String>,
+    /// The smallest gap between two distinct bar positions on a CONTINUOUS x axis, in data units
+    /// — what decides how wide a bar on a time axis may be before it overlaps its neighbour.
+    /// `None` when there is no such pair.
+    pub x_gap: Option<f64>,
 }
 
 /// What the chart was configured with, gathered so the pipeline takes one argument.
@@ -71,6 +75,9 @@ pub struct Config<'a> {
     pub font: day_spec::CanvasFont,
     /// Space the legend has already claimed, so the plot does not draw under it.
     pub legend_insets: Insets,
+    /// Fixed margins in place of the measured ones (`Chart::plot_insets`). The legend's space is
+    /// added on top either way.
+    pub plot_insets: Option<Insets>,
 }
 
 /// A stable key for "the same x position", used to group marks for stacking and dodging.
@@ -253,13 +260,31 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         if p.mark.kind == MarkKind::Sector {
             continue; // a sector's quantity is angular; it never sizes the y axis
         }
-        if p.v0.is_finite() {
+        // A categorical y — the rows of a heat map — is a band like a categorical x: the
+        // category itself is the datum, and the stacked bounds (which are zero for it) must not
+        // reach the scale, or the inferred band would gain a phantom "0" row.
+        if let Some(c) = p.mark.y.as_ref().and_then(|v| v.datum.as_category()) {
+            y_data.push(Datum::Category(c.to_string()));
+            continue;
+        }
+        // A mark that measures from a baseline — a bar, an area, anything with an explicit y
+        // span — sizes the axis with both of its edges. A line or a point has no baseline: its
+        // `v0` is a placeholder zero, and letting it reach the scale would pin every line chart
+        // to a zero-based axis whatever the data does.
+        let has_baseline = stackable(p.mark.kind) || p.mark.y_end.is_some();
+        if has_baseline && p.v0.is_finite() {
             y_data.push(Datum::Number(p.v0));
         }
         if p.v1.is_finite() {
             y_data.push(Datum::Number(p.v1));
         }
     }
+    let x_gap = smallest_gap(
+        placed
+            .iter()
+            .filter(|p| matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle))
+            .filter_map(|p| p.mark.x.as_ref()?.datum.as_continuous()),
+    );
     // A rule with no y is a vertical rule: it spans the axis and must not size it.
     let any_cartesian_value = placed
         .iter()
@@ -297,14 +322,31 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     // on (`axis_title` in render.rs). The inset has to reserve space on the same condition, or the
     // fallback title is drawn into whatever sits under the axis — on a legend-at-the-bottom chart,
     // straight through the legend.
-    let x_titled = cfg.x_axis.title.is_some() || x_title.as_deref().is_some_and(|t| !t.is_empty());
-    let y_titled = cfg.y_axis.title.is_some() || y_title.as_deref().is_some_and(|t| !t.is_empty());
+    // The same rule `render::axis_title` draws by: an app-set title wins, the column's label is
+    // the fallback, and an EMPTY title is how an app declines the fallback — so it reserves no
+    // room either.
+    let titled = |spec: &AxisSpec, fallback: &Option<String>| {
+        spec.title
+            .as_deref()
+            .or(fallback.as_deref())
+            .is_some_and(|t| !t.is_empty())
+    };
+    let x_titled = titled(cfg.x_axis, &x_title);
+    let y_titled = titled(cfg.y_axis, &y_title);
     let measure = |s: &str| day_core::measure_text(s, cfg.label_size, &cfg.font).width;
     let widest_y = yt1.iter().map(|t| measure(&t.label)).fold(0.0f64, f64::max);
     let line = day_core::measure_text("0", cfg.label_size, &cfg.font).height;
-    // A polar chart has no axes to leave room for; it wants the whole pane so the circle is as
-    // large as it can be.
-    let insets = if cfg.coordinate.is_polar() {
+    let insets = if let Some(fixed) = cfg.plot_insets {
+        // The app decided; only the legend's own room is added.
+        Insets {
+            top: cfg.legend_insets.top + fixed.top,
+            leading: cfg.legend_insets.leading + fixed.leading,
+            bottom: cfg.legend_insets.bottom + fixed.bottom,
+            trailing: cfg.legend_insets.trailing + fixed.trailing,
+        }
+    } else if cfg.coordinate.is_polar() {
+        // A polar chart has no axes to leave room for; it wants the whole pane so the circle is
+        // as large as it can be.
         Insets {
             top: cfg.legend_insets.top + 4.0,
             leading: cfg.legend_insets.leading + 4.0,
@@ -312,24 +354,47 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
             trailing: cfg.legend_insets.trailing + 4.0,
         }
     } else {
+        // The room each axis needs on ITS side, then placed on whichever edge it was put.
+        let y_side = if cfg.y_axis.hidden || !cfg.y_axis.labels {
+            line * 0.5
+        } else {
+            widest_y + 10.0 + if y_titled { line + 4.0 } else { 0.0 }
+        };
+        let x_side = if cfg.x_axis.hidden || !cfg.x_axis.labels {
+            line * 0.5
+        } else {
+            // The title is drawn 8pt past the plot plus 1.9 line heights, CENTRED, so it needs
+            // half a line more than that beyond it. Allocating one line put it into whatever sat
+            // under the axis — on a legend-at-the-bottom chart, the legend.
+            line + 10.0 + if x_titled { line * 1.6 + 6.0 } else { 0.0 }
+        };
+        let y_trailing = cfg.y_axis.position == AxisPosition::Trailing;
+        let x_top = cfg.x_axis.position == AxisPosition::Top;
+        // The first and last x labels hang half their width past the plot's ends; whichever end
+        // has no y axis to hide behind reserves that overhang itself.
+        let x_labelled = !cfg.x_axis.hidden && cfg.x_axis.labels;
+        let overhang = |t: Option<&Tick>| {
+            if x_labelled {
+                x_overhang(t, &measure)
+            } else {
+                line * 0.5
+            }
+        };
         Insets {
-            top: cfg.legend_insets.top + line * 0.75,
+            top: cfg.legend_insets.top + if x_top { x_side } else { line * 0.75 },
+            bottom: cfg.legend_insets.bottom + if x_top { line * 0.5 } else { x_side },
             leading: cfg.legend_insets.leading
-                + if cfg.y_axis.hidden || !cfg.y_axis.labels {
-                    line * 0.5
+                + if y_trailing {
+                    overhang(xt1.first())
                 } else {
-                    widest_y + 10.0 + if y_titled { line + 4.0 } else { 0.0 }
+                    y_side
                 },
-            bottom: cfg.legend_insets.bottom
-                + if cfg.x_axis.hidden || !cfg.x_axis.labels {
-                    line * 0.5
+            trailing: cfg.legend_insets.trailing
+                + if y_trailing {
+                    y_side
                 } else {
-                    // The title is drawn 8pt below the plot plus 1.9 line heights, CENTRED, so it
-                    // needs half a line more than that beneath it. Allocating one line put it into
-                    // whatever sat under the axis — on a legend-at-the-bottom chart, the legend.
-                    line + 10.0 + if x_titled { line * 1.6 + 6.0 } else { 0.0 }
+                    overhang(xt1.last())
                 },
-            trailing: cfg.legend_insets.trailing + widest_x_overhang(&xt1, &measure),
         }
     };
     let plot = insets.apply(size);
@@ -355,15 +420,26 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         legend,
         x_title,
         y_title,
+        x_gap,
     }
 }
 
-/// Half the last x label hangs past the plot's right edge; reserve it so it is not clipped.
-fn widest_x_overhang(ticks: &[Tick], measure: &dyn Fn(&str) -> f64) -> f64 {
-    ticks
-        .last()
-        .map(|t| measure(&t.label) / 2.0 + 4.0)
-        .unwrap_or(4.0)
+/// Half of an end label hangs past the plot's edge; reserve it so it is not clipped.
+fn x_overhang(tick: Option<&Tick>, measure: &dyn Fn(&str) -> f64) -> f64 {
+    tick.map(|t| measure(&t.label) / 2.0 + 4.0).unwrap_or(4.0)
+}
+
+/// The smallest positive difference between any two of the values, or `None` with fewer than two
+/// distinct ones.
+fn smallest_gap(values: impl Iterator<Item = f64>) -> Option<f64> {
+    let mut xs: Vec<f64> = values.filter(|v| v.is_finite()).collect();
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    xs.windows(2)
+        .map(|w| w[1] - w[0])
+        .filter(|g| *g > 0.0)
+        .fold(None, |acc: Option<f64>, g| {
+            Some(acc.map_or(g, |a| a.min(g)))
+        })
 }
 
 fn scales(

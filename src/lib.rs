@@ -65,7 +65,9 @@ pub mod ticks;
 
 pub use axis::{AxisPosition, AxisSpec, LegendPosition};
 pub use coord::Coordinate;
-pub use data::{Datum, Interval, IntoDatum, Value, time, value};
+pub use data::{Datum, Interval, IntoDatum, Value, date, parse_iso_date, time, value};
+pub use day_spec::{LineCap, LineJoin};
+pub use layout::Insets;
 pub use mark::{
     Annotation, AnnotationPosition, Dimension, Interpolation, Mark, MarkKind, MarkStyle, Stacking,
     Symbol, area, bar, line, point, rect, rule_x, rule_y, sector,
@@ -81,11 +83,12 @@ use day_pieces::{Draw, TextStyle};
 use day_spec::props::TextAlign;
 use day_spec::{CanvasFont, Color, Point, Rect, Shape, Size, TextAnchor, TextVAlign};
 
-use crate::layout::Insets;
-
 /// Assigns a color to a series by index and name. Named because the chart stores one and every
 /// stage of the pipeline is handed a reference to it.
 pub type SeriesColors = Rc<dyn Fn(usize, &str) -> Color>;
+
+/// Answers a scale's domain from inside the chart's binding; `None` leaves it inferred.
+pub type DomainFn = Rc<dyn Fn() -> Option<(f64, f64)>>;
 
 /// A chart. Build it with [`chart`], configure it with the builder methods, and place it like any
 /// other piece — it grows to fill, so give it a `.frame(w, h)` or let its container size it.
@@ -101,6 +104,9 @@ pub struct Chart {
     label_size: f64,
     font: CanvasFont,
     colors: SeriesColors,
+    plot_insets: Option<Insets>,
+    x_domain_fn: Option<DomainFn>,
+    y_domain_fn: Option<DomainFn>,
 }
 
 /// A chart of the marks the closure produces.
@@ -121,6 +127,9 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         label_size: 11.0,
         font: CanvasFont::default(),
         colors: Rc::new(|i, _| style::categorical(i)),
+        plot_insets: None,
+        x_domain_fn: None,
+        y_domain_fn: None,
     }
 }
 
@@ -135,6 +144,18 @@ impl Chart {
     /// Pin the y domain.
     pub fn y_domain(mut self, lo: f64, hi: f64) -> Self {
         self.y_scale.domain = Some(Interval::new(lo, hi));
+        self
+    }
+    /// Pin the x domain to whatever the closure answers, re-asked inside the chart's binding —
+    /// so a domain that follows a signal (a range picker) tracks it the way the marks do.
+    /// `None` leaves the domain inferred.
+    pub fn x_domain_with(mut self, f: impl Fn() -> Option<(f64, f64)> + 'static) -> Self {
+        self.x_domain_fn = Some(Rc::new(f));
+        self
+    }
+    /// Pin the y domain to whatever the closure answers, re-asked inside the chart's binding.
+    pub fn y_domain_with(mut self, f: impl Fn() -> Option<(f64, f64)> + 'static) -> Self {
+        self.y_domain_fn = Some(Rc::new(f));
         self
     }
     /// Pin the x categories, and their order.
@@ -182,6 +203,35 @@ impl Chart {
     }
     pub fn y_axis_hidden(mut self) -> Self {
         self.y_axis.hidden = true;
+        self
+    }
+    /// Draw the y axis on the trailing edge — the convention for a price chart, where the latest
+    /// value sits beside its label rather than across the plot from it.
+    pub fn y_axis_trailing(mut self) -> Self {
+        self.y_axis.position = AxisPosition::Trailing;
+        self
+    }
+    /// Draw the x axis along the top edge.
+    pub fn x_axis_top(mut self) -> Self {
+        self.x_axis.position = AxisPosition::Top;
+        self
+    }
+    /// Hide both axes and the grid, and draw the marks edge to edge: a sparkline, a gauge, or a
+    /// track whose labels the app places itself.
+    pub fn bare(mut self) -> Self {
+        self.x_axis.hidden = true;
+        self.y_axis.hidden = true;
+        self.x_axis.grid = false;
+        self.y_axis.grid = false;
+        self.legend = LegendPosition::Hidden;
+        self.plot_insets = Some(Insets::default());
+        self
+    }
+    /// Replace the measured margins with fixed ones. The default insets are computed from the
+    /// axis labels the chart is about to draw; a chart with no axes wants none of that room, and
+    /// a chart whose marks overhang the plot (a fat point at the last sample) wants a little.
+    pub fn plot_insets(mut self, insets: Insets) -> Self {
+        self.plot_insets = Some(insets);
         self
     }
     /// Drop the grid on both axes — the right call for a chart whose marks already partition the
@@ -397,6 +447,9 @@ impl Piece for Chart {
             label_size,
             font,
             colors,
+            plot_insets,
+            x_domain_fn,
+            y_domain_fn,
         } = self;
 
         // A chart fills what it is given: the whole point of measuring the axis per draw is that
@@ -412,6 +465,16 @@ impl Piece for Chart {
                 .clone()
                 .unwrap_or_else(|| Chrome::for_dark(day_core::dark_mode()));
             let ms = (marks)();
+            // A domain closure is read here, inside the binding, so the scale follows the same
+            // signals the marks do.
+            let mut x_scale = x_scale.clone();
+            if let Some(f) = &x_domain_fn {
+                x_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+            }
+            let mut y_scale = y_scale.clone();
+            if let Some(f) = &y_domain_fn {
+                y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+            }
 
             // The legend is measured first: it takes its space out of the pane before the plot
             // rectangle is computed, so the two can never overlap.
@@ -443,6 +506,7 @@ impl Piece for Chart {
                 label_size,
                 font: font.clone(),
                 legend_insets,
+                plot_insets,
             };
             let resolved = resolve::resolve(ms, size, &cfg);
             let paint = render::Paint2 {

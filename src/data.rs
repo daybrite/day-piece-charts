@@ -123,6 +123,34 @@ pub fn time(label: impl Into<String>, epoch_seconds: f64) -> Value {
     }
 }
 
+/// `date("Date", "2026-07-01")` — a labelled calendar day from an ISO `YYYY-MM-DD` string, as the
+/// instant that day begins.
+///
+/// The everyday source of a time axis is a column of date strings — an exchange's daily bars, a
+/// CSV export — and every app holding one would otherwise write the same calendar arithmetic on
+/// the way in. A string that does not parse becomes a non-finite instant, which the pipeline drops
+/// the way it drops a NaN (see [`Datum::is_finite`]) rather than plotting it at the epoch.
+pub fn date(label: impl Into<String>, iso: &str) -> Value {
+    Value {
+        label: label.into(),
+        datum: Datum::Time(parse_iso_date(iso).unwrap_or(f64::NAN)),
+    }
+}
+
+/// Seconds since the epoch at the start of an ISO `YYYY-MM-DD` day. A time of day after a `T` is
+/// ignored; anything that is not a date is `None`.
+pub fn parse_iso_date(s: &str) -> Option<f64> {
+    let day = s.trim().split('T').next()?;
+    let mut parts = day.splitn(3, '-');
+    let y: i64 = parts.next()?.parse().ok()?;
+    let m: u32 = parts.next()?.parse().ok()?;
+    let d: u32 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    Some(crate::ticks::civil::to_days(y, m, d) as f64 * 86_400.0)
+}
+
 /// The extent a continuous scale covers: a closed interval, always ordered `lo <= hi`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Interval {

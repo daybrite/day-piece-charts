@@ -14,7 +14,7 @@
 //! exemption `Size::new(w, h)` takes), and everything Swift expresses as a labelled initializer
 //! variant — `BarMark(x:yStart:yEnd:)` — is a builder method here (`.y_range(start, end)`).
 
-use day_spec::Color;
+use day_spec::{Color, LineCap, LineJoin};
 
 use crate::data::Value;
 
@@ -159,6 +159,9 @@ pub enum AnnotationPosition {
 pub struct Annotation {
     pub text: String,
     pub position: AnnotationPosition,
+    /// `None` draws in the chart's label color. A heat map's cell text sets one per cell, because
+    /// no single color reads on both ends of a ramp.
+    pub color: Option<Color>,
 }
 
 /// Everything about a mark's appearance that is not its geometry. Named fields per the API style
@@ -169,10 +172,17 @@ pub struct MarkStyle {
     pub fill: Option<Color>,
     pub opacity: f64,
     pub corner_radius: f64,
+    /// A vertical gradient from the mark's top to its bottom, for area and bar fills. Set, it
+    /// replaces the solid fill; the series color still names the mark in the legend.
+    pub gradient: Option<(Color, Color)>,
     /// Stroke width for line and rule marks, and the outline of a stroked symbol.
     pub line_width: f64,
     /// Dash pattern in points, empty for solid.
     pub dash: Vec<f64>,
+    /// How a line or rule ends, and how its segments meet. Butt and miter are the canvas
+    /// defaults; a price line reads better rounded, which is what [`Mark::rounded`] sets.
+    pub line_cap: LineCap,
+    pub line_join: LineJoin,
     pub interpolation: Interpolation,
     pub symbol: Option<Symbol>,
     /// Symbol AREA in square points, matching Swift Charts' `symbolSize` — area rather than
@@ -187,8 +197,11 @@ impl Default for MarkStyle {
             fill: None,
             opacity: 1.0,
             corner_radius: 0.0,
+            gradient: None,
             line_width: 2.0,
             dash: Vec::new(),
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Miter,
             interpolation: Interpolation::Linear,
             symbol: None,
             symbol_size: 64.0,
@@ -314,6 +327,28 @@ impl Mark {
         self.style.dash = pattern.into();
         self
     }
+    /// Fill an area or bar with a vertical gradient, `top` at the mark's top edge and `bottom` at
+    /// its baseline — the fade under a price line. The series color still names the mark in the
+    /// legend; only the fill changes.
+    pub fn gradient(mut self, top: Color, bottom: Color) -> Self {
+        self.style.gradient = Some((top, bottom));
+        self
+    }
+    pub fn line_cap(mut self, cap: LineCap) -> Self {
+        self.style.line_cap = cap;
+        self
+    }
+    pub fn line_join(mut self, join: LineJoin) -> Self {
+        self.style.line_join = join;
+        self
+    }
+    /// Round caps and joins, so a stroked series turns its corners without a spike and a thick
+    /// rule ends in a half circle rather than a square edge.
+    pub fn rounded(mut self) -> Self {
+        self.style.line_cap = LineCap::Round;
+        self.style.line_join = LineJoin::Round;
+        self
+    }
     pub fn interpolation(mut self, m: Interpolation) -> Self {
         self.style.interpolation = m;
         self
@@ -355,10 +390,26 @@ impl Mark {
         self
     }
     pub fn annotation(mut self, position: AnnotationPosition, text: impl Into<String>) -> Self {
+        let color = self.annotation.as_ref().and_then(|a| a.color);
         self.annotation = Some(Annotation {
             text: text.into(),
             position,
+            color,
         });
+        self
+    }
+    /// Draw this mark's annotation in `color` instead of the chart's label color.
+    pub fn annotation_color(mut self, color: Color) -> Self {
+        match &mut self.annotation {
+            Some(a) => a.color = Some(color),
+            None => {
+                self.annotation = Some(Annotation {
+                    text: String::new(),
+                    position: AnnotationPosition::Automatic,
+                    color: Some(color),
+                })
+            }
+        }
         self
     }
 

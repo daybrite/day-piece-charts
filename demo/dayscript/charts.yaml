@@ -44,6 +44,14 @@ flow:
   - assert_text: { id: charts-marks, text: "2" }
   - screenshot: charts-donut
 
+  # The heat map: the same marks as a grid, with the REGION on y. Both axes are bands, so the
+  # mark count is the grid's cell count and the drawing is what the screenshot carries.
+  - select: { id: charts-composition-picker, index: 4 }
+  - assert_text: { id: charts-grammar, text: "rect, colored by Revenue" }
+  - assert_text: { id: charts-marks, text: "12" }
+  - screenshot: charts-heatmap
+
+
   # Back to Cartesian, then move the data itself. The slider holds 6, so both moves below are
   # real changes rather than same-value sets.
   - select: { id: charts-composition-picker, index: 0 }

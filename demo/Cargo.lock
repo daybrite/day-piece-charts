@@ -136,7 +136,6 @@ dependencies = [
 [[package]]
 name = "day"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-android",
  "day-core",
@@ -157,7 +156,6 @@ dependencies = [
 [[package]]
 name = "day-android"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-core",
  "day-pieces",
@@ -170,7 +168,6 @@ dependencies = [
 [[package]]
 name = "day-bridge"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-spec",
 ]
@@ -178,7 +175,6 @@ dependencies = [
 [[package]]
 name = "day-build"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "cc",
  "day-fonts",
@@ -189,7 +185,6 @@ dependencies = [
 [[package]]
 name = "day-core"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "anstream",
  "anstyle",
@@ -204,7 +199,6 @@ dependencies = [
 [[package]]
 name = "day-fluent"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-core",
  "day-l10n",
@@ -214,17 +208,14 @@ dependencies = [
 [[package]]
 name = "day-fonts"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 
 [[package]]
 name = "day-geometry"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 
 [[package]]
 name = "day-l10n"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-reactive",
  "fluent-bundle",
@@ -244,12 +235,10 @@ dependencies = [
 [[package]]
 name = "day-macros"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 
 [[package]]
 name = "day-mock"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-spec",
 ]
@@ -257,7 +246,6 @@ dependencies = [
 [[package]]
 name = "day-part-clipboard"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-android",
  "day-bridge",
@@ -270,7 +258,6 @@ dependencies = [
 [[package]]
 name = "day-part-prefs"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-android",
  "day-bridge",
@@ -295,7 +282,6 @@ dependencies = [
 [[package]]
 name = "day-pieces"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-core",
  "day-geometry",
@@ -309,7 +295,6 @@ dependencies = [
 [[package]]
 name = "day-reactive"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "log",
  "slotmap",
@@ -318,7 +303,6 @@ dependencies = [
 [[package]]
 name = "day-script"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-core",
  "day-fluent",
@@ -333,7 +317,6 @@ dependencies = [
 [[package]]
 name = "day-spec"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "day-fonts",
  "day-geometry",
@@ -344,7 +327,6 @@ dependencies = [
 [[package]]
 name = "day-uikit"
 version = "0.4.2"
-source = "git+https://github.com/daybrite/day.git#1be7844c3859475f1eb45afb85fabfc1b5ab87e6"
 dependencies = [
  "block2",
  "day-core",

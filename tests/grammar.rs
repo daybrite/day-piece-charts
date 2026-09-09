@@ -8,6 +8,7 @@
 //! tree is mounted, which is exactly what a unit test wants: a deterministic width that does not
 //! depend on which machine runs it.
 
+use day_piece_charts::axis::AxisPosition;
 use day_piece_charts::data::Interval;
 use day_piece_charts::mark::Stacking;
 use day_piece_charts::scale::{BandPadding, ScaleKind, ScaleSpec, infer};
@@ -231,6 +232,7 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
         label_size: 11.0,
         font: Default::default(),
         legend_insets: Default::default(),
+        plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
 }
@@ -257,6 +259,7 @@ fn a_bar_chart_always_includes_its_baseline() {
         label_size: 11.0,
         font: Default::default(),
         legend_insets: Default::default(),
+        plot_insets: None,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg);
     assert!(
@@ -306,6 +309,7 @@ fn sectors_stack_by_default_so_a_pie_sweeps_a_whole_turn() {
         label_size: 11.0,
         font: Default::default(),
         legend_insets: Default::default(),
+        plot_insets: None,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(300.0, 300.0), &cfg);
     let bounds: Vec<(f64, f64)> = r.marks.iter().map(|p| (p.v0, p.v1)).collect();
@@ -313,4 +317,180 @@ fn sectors_stack_by_default_so_a_pie_sweeps_a_whole_turn() {
     // And the wedges tile the turn exactly: the last one ends where the first began.
     let total: f64 = r.marks.iter().map(|p| p.v1 - p.v0).sum();
     assert_eq!(r.marks.last().unwrap().v1, total);
+}
+
+/// The pipeline with the default configuration, for the tests that read the scales back.
+fn resolve_default(marks: Vec<Mark>, size: day_spec::Size) -> day_piece_charts::resolve::Resolved {
+    let x = ScaleSpec::default();
+    let y = ScaleSpec::default();
+    let ax = AxisSpec::default();
+    let colors = |i: usize, _: &str| day_piece_charts::categorical(i);
+    let cfg = day_piece_charts::resolve::Config {
+        x_scale: &x,
+        y_scale: &y,
+        x_axis: &ax,
+        y_axis: &ax,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: None,
+    };
+    day_piece_charts::resolve::resolve(marks, size, &cfg)
+}
+
+#[test]
+fn an_iso_date_is_the_start_of_its_day_and_garbage_is_dropped() {
+    let epoch = date("Date", "1970-01-01");
+    assert_eq!(epoch.datum, Datum::Time(0.0));
+    let leap = date("Date", "2024-02-29");
+    assert_eq!(
+        leap.datum,
+        Datum::Time(civil::to_days(2024, 2, 29) as f64 * 86_400.0)
+    );
+    // A trailing clock time is tolerated; anything that is not a date is a non-finite instant,
+    // which the pipeline drops rather than plotting at the epoch.
+    assert_eq!(
+        date("Date", "2024-02-29T15:30:00Z").datum,
+        date("Date", "2024-02-29").datum
+    );
+    assert!(!date("Date", "yesterday").datum.is_finite());
+    assert!(!date("Date", "2024-13-01").datum.is_finite());
+}
+
+#[test]
+fn a_categorical_y_becomes_a_band_of_rows() {
+    // A heat map: one cell per (month, region), the region a CATEGORY on y. The y scale has to be
+    // a band of the two rows, in first-seen order, with no phantom numeric row from the stacked
+    // bounds a rect does not have.
+    let marks = vec![
+        rect(value("Month", "Jan"), value("Region", "North")),
+        rect(value("Month", "Feb"), value("Region", "North")),
+        rect(value("Month", "Jan"), value("Region", "South")),
+    ];
+    let r = resolve_default(marks, day_spec::Size::new(400.0, 300.0));
+    assert!(
+        r.y.kind.is_discrete(),
+        "y should be a band, got {:?}",
+        r.y.kind
+    );
+    assert_eq!(
+        r.y.categories,
+        vec!["North".to_string(), "South".to_string()]
+    );
+    assert_eq!(r.y_ticks.len(), 2, "one label per row: {:?}", r.y_ticks);
+    assert!(r.y.band_width() > 0.0);
+    // And the first row is at the TOP, the way a table reads.
+    let north = r.y.project(&Datum::Category("North".into())).unwrap();
+    let south = r.y.project(&Datum::Category("South".into())).unwrap();
+    assert!(
+        north < south,
+        "North ({north}) should sit above South ({south})"
+    );
+}
+
+#[test]
+fn bars_on_a_continuous_axis_are_as_wide_as_their_closest_pair_allows() {
+    // Daily bars on a time axis: the gap is a day, whatever the axis spans.
+    let day = 86_400.0;
+    let marks: Vec<Mark> = (0..10)
+        .map(|i| bar(time("Date", i as f64 * day), value("Volume", 5.0)))
+        .collect();
+    let r = resolve_default(marks, day_spec::Size::new(400.0, 300.0));
+    assert!(!r.x.kind.is_discrete());
+    assert_eq!(r.x_gap, Some(day));
+    // A lone bar has no pair to measure against.
+    let r = resolve_default(
+        vec![bar(time("Date", 0.0), value("Volume", 5.0))],
+        day_spec::Size::new(400.0, 300.0),
+    );
+    assert_eq!(r.x_gap, None);
+}
+
+#[test]
+fn a_trailing_y_axis_moves_its_margin_to_the_trailing_edge() {
+    let marks = || {
+        vec![
+            day_piece_charts::line(value("x", 0.0), value("Price", 1000.0)),
+            day_piece_charts::line(value("x", 10.0), value("Price", 1200.0)),
+        ]
+    };
+    let size = day_spec::Size::new(400.0, 300.0);
+    let leading = resolve_default(marks(), size);
+    let x = ScaleSpec::default();
+    let y = ScaleSpec::default();
+    let ax = AxisSpec::default();
+    let ay = AxisSpec {
+        position: AxisPosition::Trailing,
+        ..Default::default()
+    };
+    let colors = |i: usize, _: &str| day_piece_charts::categorical(i);
+    let cfg = day_piece_charts::resolve::Config {
+        x_scale: &x,
+        y_scale: &y,
+        x_axis: &ax,
+        y_axis: &ay,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: None,
+    };
+    let trailing = day_piece_charts::resolve::resolve(marks(), size, &cfg);
+    // The label column is the same width either way; it just changes sides.
+    assert!(
+        trailing.plot.origin.x < leading.plot.origin.x,
+        "trailing axis left {} of margin on the leading edge, the leading axis {}",
+        trailing.plot.origin.x,
+        leading.plot.origin.x
+    );
+    let right =
+        |r: &day_piece_charts::resolve::Resolved| size.width - r.plot.origin.x - r.plot.size.width;
+    assert!(right(&trailing) > right(&leading));
+}
+
+#[test]
+fn fixed_insets_replace_the_measured_margins() {
+    let marks = vec![
+        day_piece_charts::line(value("x", 0.0), value("y", 1.0)),
+        day_piece_charts::line(value("x", 1.0), value("y", 2.0)),
+    ];
+    let x = ScaleSpec::default();
+    let y = ScaleSpec::default();
+    let ax = AxisSpec::default();
+    let colors = |i: usize, _: &str| day_piece_charts::categorical(i);
+    let cfg = day_piece_charts::resolve::Config {
+        x_scale: &x,
+        y_scale: &y,
+        x_axis: &ax,
+        y_axis: &ax,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: Some(Insets::uniform(2.0)),
+    };
+    let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(100.0, 50.0), &cfg);
+    assert_eq!(r.plot, day_spec::Rect::new(2.0, 2.0, 96.0, 46.0));
+}
+
+#[test]
+fn a_line_chart_is_not_zero_based() {
+    // A line has no baseline, so its axis is the data's own extent. Bars and areas include zero
+    // (tested above); a line that did too would flatten every price chart into a ribbon at
+    // the top of the plot.
+    let marks = vec![
+        day_piece_charts::line(value("x", 0.0), value("Price", 980.0)),
+        day_piece_charts::line(value("x", 1.0), value("Price", 1000.0)),
+        point(value("x", 2.0), value("Price", 990.0)),
+    ];
+    let r = resolve_default(marks, day_spec::Size::new(400.0, 300.0));
+    assert!(
+        r.y.domain.lo >= 980.0 - 1e-9,
+        "y domain {:?} reaches below the data",
+        r.y.domain
+    );
 }

@@ -11,14 +11,15 @@
 use day_geometry::Affine;
 use day_pieces::{Draw, PathBuilder, TextStyle};
 use day_spec::props::TextAlign;
-use day_spec::{Color, FillRule, Paint, Point, Rect, Shape, StrokeStyle, TextAnchor, TextVAlign};
+use day_spec::{
+    Color, FillRule, LinearGradient, Paint, Point, Rect, Shape, StrokeStyle, TextAnchor, TextVAlign,
+};
 
-use crate::axis::AxisSpec;
+use crate::axis::{AxisPosition, AxisSpec};
 use crate::coord::Coordinate;
 use crate::data::Datum;
 use crate::mark::{Interpolation, MarkKind, Symbol};
 use crate::resolve::{Placed, Resolved};
-use crate::scale::Scale;
 use crate::style::Chrome;
 
 /// How the chart's chrome is drawn, gathered so `draw` takes one argument.
@@ -64,32 +65,63 @@ fn color_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>) -> Color {
     }
 }
 
-/// The band a mark occupies along x, in device points, narrowed by its dodging slot.
-fn band_of(p: &Placed, x: &Scale) -> f64 {
-    let full = if x.kind.is_discrete() {
-        x.band_width()
-    } else {
-        // A continuous x has no band; give bars a share of the smallest gap between them so a
-        // time-series bar chart still has bars rather than hairlines.
-        (x.range.1 - x.range.0).abs() / 24.0
+/// The full band one x position owns, in device points.
+///
+/// A discrete scale says so itself. A continuous one has no bands, so a bar there takes the
+/// smallest gap between any two bars (`Resolved::x_gap`) less the scale's inner padding — which
+/// is what lets a year of daily volume draw as 250 bars that touch nothing, where a fixed share
+/// of the axis would have stacked them on top of one another. With a single bar there is no gap
+/// to measure, and it gets a twenty-fourth of the axis.
+fn full_band(r: &Resolved) -> f64 {
+    let x = &r.x;
+    if x.kind.is_discrete() {
+        return x.band_width();
+    }
+    let extent = (x.range.1 - x.range.0).abs();
+    let Some(gap) = r.x_gap else {
+        return extent / 24.0;
     };
-    let slot = full / p.dodge_count.max(1) as f64;
+    // Measured at both ends of the domain: on a log or power axis equal data gaps are not
+    // equal device gaps, and the narrower end is the one that must not overlap.
+    let device_gap = |from: f64| match (
+        x.project(&Datum::Number(from)),
+        x.project(&Datum::Number(from + gap)),
+    ) {
+        (Some(a), Some(b)) => (b - a).abs(),
+        _ => extent / 24.0,
+    };
+    let narrowest = device_gap(x.domain.lo).min(device_gap(x.domain.hi - gap));
+    (narrowest * (1.0 - x.padding.inner)).min(extent)
+}
+
+/// The band a mark occupies along x, in device points, narrowed by its dodging slot.
+fn band_of(p: &Placed, r: &Resolved) -> f64 {
+    let slot = full_band(r) / p.dodge_count.max(1) as f64;
     p.mark.width.resolve(slot)
 }
 
 /// The centre of a mark along x, in device points, offset into its dodging slot.
-fn center_x(p: &Placed, x: &Scale) -> Option<f64> {
-    let base = x.project(&p.mark.x.as_ref()?.datum)?;
+fn center_x(p: &Placed, r: &Resolved) -> Option<f64> {
+    let base = r.x.project(&p.mark.x.as_ref()?.datum)?;
     if p.dodge_count <= 1 {
         return Some(base);
     }
-    let full = if x.kind.is_discrete() {
-        x.band_width()
-    } else {
-        (x.range.1 - x.range.0).abs() / 24.0
-    };
+    let full = full_band(r);
     let slot = full / p.dodge_count as f64;
     Some(base - full / 2.0 + slot * (p.dodge_index as f64 + 0.5))
+}
+
+/// The paint a filled mark draws with: its gradient when it has one, else its color. Opacity
+/// applies to both stops, so a faded gradient fades evenly.
+fn fill_paint(p: &Placed, color: Color) -> Paint {
+    match p.mark.style.gradient {
+        Some((top, bottom)) => {
+            let o = p.mark.style.opacity.clamp(0.0, 1.0);
+            LinearGradient::vertical(top.with_alpha(top.a * o), bottom.with_alpha(bottom.a * o))
+                .into()
+        }
+        None => color.into(),
+    }
 }
 
 /// Draw the whole chart.
@@ -126,6 +158,26 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             }
         }
     }
+    // A pinned domain is the one case a mark can lie outside the plot — the app said where the
+    // axis ends, and the data did not agree. Clip to the plot along each pinned axis only, so a
+    // fat point at the last sample of an inferred axis keeps its far half.
+    let clip = r.x.explicit_domain || r.y.explicit_domain;
+    if clip {
+        let far = 1.0e5;
+        let plot = r.plot;
+        let (cx, cw) = if r.x.explicit_domain {
+            (plot.origin.x, plot.size.width)
+        } else {
+            (plot.origin.x - far, plot.size.width + 2.0 * far)
+        };
+        let (cy, chh) = if r.y.explicit_domain {
+            (plot.origin.y, plot.size.height)
+        } else {
+            (plot.origin.y - far, plot.size.height + 2.0 * far)
+        };
+        d.save();
+        d.clip(Shape::Rect(Rect::new(cx, cy, cw, chh)));
+    }
     // Areas first so lines and points read on top of them.
     for (kind, si) in connected.iter().filter(|(k, _)| *k == MarkKind::Area) {
         connected_path(d, r, paint, *kind, *si);
@@ -148,6 +200,9 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         if p.mark.kind == MarkKind::Point {
             point_mark(d, r, paint, p);
         }
+    }
+    if clip {
+        d.restore();
     }
     for i in &order {
         annotation(d, r, paint, &r.marks[*i]);
@@ -195,7 +250,16 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
 
 fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let plot = r.plot;
-    let line_h = day_core::measure_text("0", paint.label_size, &paint.font).height;
+    // One measurement for the whole axis: these are FONT metrics, the same for every label, so
+    // nothing below measures per tick (docs/fonts.md).
+    let m = day_core::measure_text("0", paint.label_size, &paint.font);
+    let line_h = m.height;
+    // How far a tick label's line box must shift up so its CAP box straddles the gridline instead.
+    // An axis label is digits, which use none of the descender room the line box reserves, so
+    // centring by the line box sits every label visibly low — half the difference between the
+    // descent and nothing. The cap middle sits `ascent - cap/2` below the line box top, and the
+    // line middle at `height/2`; the gap between them is the correction.
+    let cap_lift = m.height / 2.0 - (m.ascent - m.cap_height / 2.0);
     let label = |color: Color, anchor: TextAnchor| TextStyle {
         size: paint.label_size,
         color,
@@ -205,7 +269,19 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
 
     // --- x ---
     if !paint.x_axis.hidden {
-        let y = plot.origin.y + plot.size.height;
+        // `away` points out of the plot: down from a bottom axis, up from a top one, so every
+        // tick, label and title below is placed by one rule.
+        let top = paint.x_axis.position == AxisPosition::Top;
+        let (y, away) = if top {
+            (plot.origin.y, -1.0)
+        } else {
+            (plot.origin.y + plot.size.height, 1.0)
+        };
+        let v_anchor = if top {
+            TextVAlign::Bottom
+        } else {
+            TextVAlign::Top
+        };
         d.stroke(
             Shape::Line(
                 Point::new(plot.origin.x, y),
@@ -227,7 +303,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             let Some(x) = x else { continue };
             if paint.x_axis.ticks {
                 d.stroke(
-                    Shape::Line(Point::new(x, y), Point::new(x, y + 4.0)),
+                    Shape::Line(Point::new(x, y), Point::new(x, y + 4.0 * away)),
                     paint.chrome.tick,
                     1.0,
                 );
@@ -235,12 +311,12 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             if paint.x_axis.labels {
                 d.text(
                     &t.label,
-                    Point::new(x, y + 6.0),
+                    Point::new(x, y + 6.0 * away),
                     label(
                         paint.chrome.label,
                         TextAnchor {
                             h: TextAlign::Center,
-                            v: TextVAlign::Top,
+                            v: v_anchor,
                         },
                     ),
                 );
@@ -251,13 +327,13 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 title,
                 Point::new(
                     plot.origin.x + plot.size.width / 2.0,
-                    y + 10.0 + line_h * 1.4,
+                    y + (10.0 + line_h * 1.4) * away,
                 ),
                 label(
                     paint.chrome.title,
                     TextAnchor {
                         h: TextAlign::Center,
-                        v: TextVAlign::Top,
+                        v: v_anchor,
                     },
                 ),
             );
@@ -266,7 +342,18 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
 
     // --- y ---
     if !paint.y_axis.hidden {
-        let x = plot.origin.x;
+        // The same rule sideways: `away` points out of the plot, and the labels hang toward it.
+        let trailing = paint.y_axis.position == AxisPosition::Trailing;
+        let (x, away) = if trailing {
+            (plot.origin.x + plot.size.width, 1.0)
+        } else {
+            (plot.origin.x, -1.0)
+        };
+        let h_anchor = if trailing {
+            TextAlign::Leading
+        } else {
+            TextAlign::Trailing
+        };
         d.stroke(
             Shape::Line(
                 Point::new(x, plot.origin.y),
@@ -286,22 +373,23 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             let Some(y) = y else { continue };
             if paint.y_axis.ticks {
                 d.stroke(
-                    Shape::Line(Point::new(x - 4.0, y), Point::new(x, y)),
+                    Shape::Line(Point::new(x + 4.0 * away, y), Point::new(x, y)),
                     paint.chrome.tick,
                     1.0,
                 );
             }
             if paint.y_axis.labels {
-                // Right-aligned against the axis and centred on the tick. The anchor says that
+                // Aligned against the axis and centred on the tick. The anchor says that
                 // outright, so nothing here has to measure the label first — the backend already
-                // holds the width it is about to draw with (docs/canvas.md "Text").
+                // holds the width it is about to draw with (docs/canvas.md "Text"). The lift is
+                // what turns "centred line box" into "centred digits".
                 d.text(
                     &t.label,
-                    Point::new(x - 8.0, y),
+                    Point::new(x + 8.0 * away, y - cap_lift),
                     label(
                         paint.chrome.label,
                         TextAnchor {
-                            h: TextAlign::Trailing,
+                            h: h_anchor,
                             v: TextVAlign::Middle,
                         },
                     ),
@@ -311,7 +399,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         if let Some(title) = axis_title(paint.y_axis, r.y_title.as_deref()) {
             // Rotated a quarter turn, which is the only way a y title fits a narrow margin. The
             // rotation is about the text's own anchor, so the transform is translate-rotate.
-            let cx = plot.origin.x - (widest(&r.y_ticks, paint) + 14.0 + line_h / 2.0);
+            let cx = x + (widest(&r.y_ticks, paint) + 14.0 + line_h / 2.0) * away;
             let cy = plot.origin.y + plot.size.height / 2.0;
             d.transformed(
                 Affine::rotate(-std::f64::consts::FRAC_PI_2).then(Affine::translate(cx, cy)),
@@ -353,30 +441,47 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         sector(d, r, paint, p);
         return;
     }
-    let Some(cx) = center_x(p, &r.x) else { return };
-    let (Some(y0), Some(y1)) = (
-        r.y.project(&Datum::Number(p.v0)),
-        r.y.project(&Datum::Number(p.v1)),
-    ) else {
-        return;
-    };
-    let w = if p.mark.kind == MarkKind::Rectangle {
-        p.mark.width.resolve(band_of(p, &r.x))
+    let Some(cx) = center_x(p, r) else { return };
+    let (top, bottom) = if r.y.kind.is_discrete() {
+        // A categorical y — a heat map's rows: the cell is centred on its band, as tall as the
+        // band less the mark's own height dimension.
+        let Some(cy) = p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum)) else {
+            return;
+        };
+        let h = p.mark.height.resolve(r.y.band_width());
+        (cy - h / 2.0, cy + h / 2.0)
     } else {
-        band_of(p, &r.x)
+        let (Some(y0), Some(y1)) = (
+            r.y.project(&Datum::Number(p.v0)),
+            r.y.project(&Datum::Number(p.v1)),
+        ) else {
+            return;
+        };
+        // Clamped to the plot: a bar's baseline is zero, and zero has no position on a log axis
+        // — it projects to an enormous negative and the bar runs off the pane. Clamping puts the
+        // baseline on the axis floor, which is what a bar on a log scale actually means.
+        let (y0, y1) = (r.y.clamp_to_range(y0), r.y.clamp_to_range(y1));
+        (y0.min(y1), y0.max(y1))
     };
-    // Clamped to the plot: a bar's baseline is zero, and zero has no position on a log axis — it
-    // projects to an enormous negative and the bar runs off the pane. Clamping puts the baseline on
-    // the axis floor, which is what a bar on a log scale actually means.
-    let (y0, y1) = (r.y.clamp_to_range(y0), r.y.clamp_to_range(y1));
-    let (top, bottom) = (y0.min(y1), y0.max(y1));
+    // An explicit x span — a histogram bin, a Gantt bar — is the rectangle's own edges; without
+    // one the mark is centred on its position and as wide as its band.
+    let (left, right) = match (&p.mark.x, &p.mark.x_end) {
+        (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
+            (Some(a), Some(b)) => (a.min(b), a.max(b)),
+            _ => return,
+        },
+        _ => {
+            let w = band_of(p, r);
+            (cx - w / 2.0, cx + w / 2.0)
+        }
+    };
     let rect = Rect::new(
-        cx - w / 2.0 + p.mark.offset.0,
+        left + p.mark.offset.0,
         top + p.mark.offset.1,
-        w,
+        (right - left).max(0.0),
         (bottom - top).max(0.0),
     );
-    let color = color_of(p, r, paint);
+    let paint = fill_paint(p, color_of(p, r, paint));
     let radius = p
         .mark
         .style
@@ -386,9 +491,9 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         .min(rect.size.width / 2.0)
         .min(rect.size.height / 2.0);
     if radius > 0.0 {
-        d.fill(Shape::RoundedRect(rect, radius), color);
+        d.fill(Shape::RoundedRect(rect, radius), paint);
     } else {
-        d.fill(Shape::Rect(rect), color);
+        d.fill(Shape::Rect(rect), paint);
     }
 }
 
@@ -396,7 +501,11 @@ fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let color = color_of(p, r, paint);
     let style = stroke_style(p);
     let plot = r.plot;
-    if let Some(v) = &p.mark.x {
+    // A rule is vertical when it has an x and no x span, horizontal when it has a y and no y
+    // span: `rule_y(v).x_range(a, b)` carries all three of x, x_end and y, and the span is what
+    // says which way it runs.
+    let vertical = p.mark.x.is_some() && p.mark.x_end.is_none();
+    if let (true, Some(v)) = (vertical, &p.mark.x) {
         let Some(x) = r.x.project(&v.datum) else {
             return;
         };
@@ -435,6 +544,8 @@ fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
 
 fn stroke_style(p: &Placed) -> StrokeStyle {
     let mut s = StrokeStyle::width(p.mark.style.line_width);
+    s.cap = p.mark.style.line_cap;
+    s.join = p.mark.style.line_join;
     if !p.mark.style.dash.is_empty() {
         s.dash = p.mark.style.dash.clone();
     }
@@ -448,7 +559,7 @@ fn series_points(r: &Resolved, kind: MarkKind, series_index: usize) -> Vec<(f64,
         .iter()
         .filter(|p| p.mark.kind == kind && p.series_index == series_index)
         .filter_map(|p| {
-            let x = center_x(p, &r.x)?;
+            let x = center_x(p, r)?;
             let y1 = r.y.project(&Datum::Number(p.v1))?;
             let y0 = r.y.project(&Datum::Number(p.v0))?;
             Some((x, y1, y0))
@@ -506,7 +617,11 @@ fn connected_path(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, kind: MarkKind
     b = append(b, &top, interp, true);
     b = append(b, &base, interp, false);
     let shape = b.close().build();
-    d.fill(shape, color.with_alpha(color.a * 0.85));
+    let paint = match proto.mark.style.gradient {
+        Some(_) => fill_paint(proto, color),
+        None => color.with_alpha(color.a * 0.85).into(),
+    };
+    d.fill(shape, paint);
 }
 
 fn device(r: &Resolved, x: f64, y: f64, polar: bool) -> Point {
@@ -652,7 +767,7 @@ fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
 }
 
 fn point_mark(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
-    let Some(x) = center_x(p, &r.x) else { return };
+    let Some(x) = center_x(p, r) else { return };
     let Some(y) = r.y.project(&Datum::Number(p.v1)) else {
         return;
     };
@@ -836,12 +951,35 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
 
 fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let Some(a) = &p.mark.annotation else { return };
-    use crate::mark::AnnotationPosition as AP;
-    let Some(x) = center_x(p, &r.x) else { return };
-    let Some(y) = r.y.project(&Datum::Number(p.v1)) else {
+    if a.text.is_empty() {
         return;
+    }
+    use crate::mark::AnnotationPosition as AP;
+    let Some(x) = center_x(p, r) else { return };
+    // On a categorical y the mark IS the band, so the annotation keys off the category, not the
+    // stacked value it does not have.
+    let y = if r.y.kind.is_discrete() {
+        p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum))
+    } else {
+        r.y.project(&Datum::Number(p.v1))
     };
+    let Some(y) = y else { return };
     let line = day_core::measure_text(&a.text, paint.label_size, &paint.font);
+    // Text laid OVER a bar or a cell has to fit inside it: a heat map's numbers on a phone-width
+    // grid would otherwise spill into their neighbours and read as one smear. Not drawing a
+    // label is the honest answer there; the color still carries the value.
+    if a.position == AP::Overlay && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
+        let width = match (&p.mark.x, &p.mark.x_end) {
+            (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
+                (Some(a), Some(b)) => (a - b).abs(),
+                _ => band_of(p, r),
+            },
+            _ => band_of(p, r),
+        };
+        if line.width > width - 2.0 {
+            return;
+        }
+    }
     let at = match a.position {
         // The automatic position puts the label clear of the mark on the side the value grew
         // toward, which is above for a positive bar and below for a negative one.
@@ -856,7 +994,7 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         at,
         TextStyle {
             size: paint.label_size,
-            color: paint.chrome.label,
+            color: a.color.unwrap_or(paint.chrome.label),
             anchor: TextAnchor::CENTERED,
             font: paint.font.clone(),
         },

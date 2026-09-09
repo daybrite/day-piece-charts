@@ -9,6 +9,7 @@ comp_grouped = Grouped bars
 comp_line = Lines
 comp_stacked = Stacked bars
 comp_donut = Donut
+comp_heatmap = Heat map
 
 # The chart's own labels.
 revenue = Revenue (thousands)

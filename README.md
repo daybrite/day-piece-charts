@@ -31,12 +31,16 @@ come from. A chart is not picked from a list of types; it is assembled:
 
 | stage | here |
 |---|---|
-| variables | `value("Revenue", 42.0)`, `time("Date", secs)` |
+| variables | `value("Revenue", 42.0)`, `time("Date", secs)`, `date("Date", "2026-07-01")` |
 | marks | `bar` `line` `area` `point` `rect` `rule_x` `rule_y` `sector` |
 | position adjustment | `Stacking::{Standard, Normalized, Center, Unstacked}`, `.by_position(…)` to dodge |
 | scales | `Linear` `Log` `Power` `Time` `Band` `Point` |
-| guides | `AxisSpec`, `LegendPosition` |
+| guides | `AxisSpec`, `AxisPosition`, `LegendPosition` |
 | coordinates | `Coordinate::Cartesian`, `Coordinate::polar()`, `Coordinate::donut(0.6)` |
+
+A heat map is a `rect` whose x *and* y are categories: both scales become bands and each cell fills
+its own. `.gradient(top, bottom)` fades an area or bar, `.rounded()` gives a line round caps and
+joins, and `.annotation_color(…)` lets a cell's text pick a color that reads on its fill.
 
 Because the coordinate system is a transformation applied *after* the marks are positioned, a pie
 chart is a normalized stacked bar in polar coordinates — and that is literally the implementation.
@@ -55,6 +59,11 @@ what a bar is there.
   through non-negative data never dips below zero on the way between two points.
 - **Bars and areas include their baseline** in the inferred domain. A bar chart that crops it
   exaggerates every difference, which is the most common way a chart misleads.
+- **Bars on a time axis are sized by their closest pair**: a year of daily volume draws as 250
+  bars that touch nothing, instead of a fixed share of the axis that would pile them up.
+- **A pinned domain clips**. Marks outside a `.y_domain(…)` the app set are cut at the plot edge
+  rather than drawn over the axis labels; an inferred axis is never clipped, so a fat point at the
+  last sample keeps its far half.
 - **The default palette is Okabe–Ito** and the sequential ramp is Viridis — colorblind-safe and
   perceptually uniform respectively, because a chart whose series are told apart by hue has to work
   for readers who cannot distinguish the pretty defaults.
@@ -74,8 +83,11 @@ are builder methods (`.y_range(start, end)`).
 | `.position(by:)` | `.by_position(…)` |
 | `.interpolationMethod(.monotone)` | `.interpolation(Interpolation::Monotone)` |
 | `.chartYScale(domain: 0...100)` | `.y_domain(0.0, 100.0)` |
+| `.chartYAxis { AxisMarks(position: .trailing) }` | `.y_axis_trailing()` |
 | `.chartLegend(position: .bottom)` | `.legend(LegendPosition::Bottom)` |
+| `.chartPlotStyle { $0.padding(0) }` | `.plot_insets(Insets::default())`, or `.bare()` for a sparkline |
 | `SectorMark(angle:innerRadius:)` | `sector(angle).inner_radius(0.6)` |
+| `RectangleMark(x:y:)` with two categories | `rect(x, y)` — a heat map cell |
 
 ## No native half
 
@@ -110,8 +122,8 @@ cd demo && day launch -p ios-uikit --script dayscript/charts.yaml
 cd demo && day launch -p android-mdc --script dayscript/charts.yaml
 ```
 
-The [demo app](demo/) depends on this crate by path and draws the same two series four ways —
-grouped bars, monotone lines, a stack, and a donut. Its walkthrough asserts what the chart derives
+The [demo app](demo/) depends on this crate by path and draws the same two series five ways —
+grouped bars, monotone lines, a stack, a donut, and a heat map. Its walkthrough asserts what the chart derives
 before it draws, since a canvas has no text for a script to read, and captures the drawing as
 screenshots. CI runs it on the iOS Simulator and the Android emulator on every push, and daily
 against day's newest `main`. To work against a local day checkout, `day patch --local ../day` in
