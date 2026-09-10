@@ -283,7 +283,21 @@ impl Chart {
         self.y_axis.grid = false;
         self
     }
-    /// Name the x axis (`.chartXAxisLabel`). Unset, it takes the label the data column carries.
+    /// Draw a solid rule along both axes and a tick mark at every label.
+    ///
+    /// Off by default, which is what Swift Charts does: the grid already says where the plot is,
+    /// and axis furniture drawn at label weight competes with the marks. This is here for a chart
+    /// that has no grid to lean on.
+    pub fn axis_rules(mut self) -> Self {
+        for spec in [&mut self.x_axis, &mut self.y_axis] {
+            spec.rule = true;
+            spec.ticks = true;
+        }
+        self
+    }
+    /// Name the x axis (`.chartXAxisLabel`). An axis with no name drawn is the default — a data
+    /// column's own label is NOT used as one, because under labels already reading `C1 C2 C3` a
+    /// title saying "Category" is noise.
     pub fn x_label(mut self, t: impl Into<String>) -> Self {
         self.x_axis.title = Some(t.into());
         self
@@ -352,6 +366,17 @@ struct LegendBox {
     horizontal: bool,
 }
 
+/// A key is a reference, not a second chart: Swift Charts draws a small circle and sets the
+/// entries close together so the legend recedes behind the plot. These two are the measured
+/// equivalents, and they are shared by the pass that reserves the space and the one that draws.
+fn legend_swatch(line: f64) -> f64 {
+    line * 0.64
+}
+
+fn legend_gap(label_size: f64) -> f64 {
+    label_size * 0.95
+}
+
 fn legend_layout(
     entries: &[(String, Color)],
     position: LegendPosition,
@@ -369,8 +394,7 @@ fn legend_layout(
         return None;
     }
     let line = day_core::measure_text("0", label_size, font).height;
-    let swatch = line * 0.8;
-    let gap = label_size * 1.4;
+    let swatch = legend_swatch(line);
     let widths: Vec<f64> = entries
         .iter()
         .map(|(n, _)| swatch + 4.0 + day_core::measure_text(n, label_size, font).width)
@@ -381,9 +405,7 @@ fn legend_layout(
     };
     match pos {
         LegendPosition::Top | LegendPosition::Bottom => {
-            let total: f64 = widths.iter().sum::<f64>() + gap * (entries.len() as f64 - 1.0);
             let h = line + 8.0;
-            let x = ((size.width - total) / 2.0).max(0.0);
             let y = if pos == LegendPosition::Top {
                 4.0
             } else {
@@ -401,14 +423,14 @@ fn legend_layout(
                         ..Default::default()
                     }
                 },
-                origin: Point::new(x, y),
+                // Only the cross-axis coordinate is settled here; `draw_legend` takes the other
+                // one from the plot rectangle, which does not exist yet.
+                origin: Point::new(0.0, y),
                 horizontal: true,
             })
         }
         _ => {
             let w = widths.iter().cloned().fold(0.0f64, f64::max) + 12.0;
-            let h = entries.len() as f64 * (line + 4.0);
-            let y = ((size.height - h) / 2.0).max(0.0);
             let leading = pos == LegendPosition::Leading;
             Some(LegendBox {
                 insets: if leading {
@@ -422,7 +444,7 @@ fn legend_layout(
                         ..Default::default()
                     }
                 },
-                origin: Point::new(if leading { 4.0 } else { size.width - w + 4.0 }, y),
+                origin: Point::new(if leading { 4.0 } else { size.width - w + 4.0 }, 0.0),
                 horizontal: false,
             })
         }
@@ -433,21 +455,29 @@ fn draw_legend(
     d: &mut Draw,
     entries: &[(String, Color)],
     lb: &LegendBox,
+    plot: Rect,
     label_size: f64,
     font: &CanvasFont,
     color: Color,
 ) {
     let line = day_core::measure_text("0", label_size, font).height;
-    let swatch = line * 0.8;
-    let gap = label_size * 1.4;
-    let mut x = lb.origin.x;
-    let mut y = lb.origin.y;
+    let (swatch, gap) = (legend_swatch(line), legend_gap(label_size));
+    // Aligned to the PLOT rather than centered in the pane: a horizontal key starts where the
+    // first bar does, which is where the eye already is after reading the axis, and a vertical
+    // one hangs from the top of the plot instead of floating against its middle.
+    let mut x = if lb.horizontal {
+        plot.origin.x
+    } else {
+        lb.origin.x
+    };
+    let mut y = if lb.horizontal {
+        lb.origin.y
+    } else {
+        plot.origin.y
+    };
     for (name, c) in entries {
         d.fill(
-            Shape::RoundedRect(
-                Rect::new(x, y + (line - swatch) / 2.0, swatch, swatch),
-                swatch * 0.25,
-            ),
+            Shape::Ellipse(Rect::new(x, y + (line - swatch) / 2.0, swatch, swatch)),
             *c,
         );
         d.text(
@@ -571,7 +601,7 @@ impl Piece for Chart {
             };
             render::draw(d, &resolved, &paint);
             if let Some(lb) = lb {
-                draw_legend(d, &series, &lb, label_size, &font, ch.label);
+                draw_legend(d, &series, &lb, resolved.plot, label_size, &font, ch.label);
             }
             // Record the hit model AFTER drawing, from the same `resolved` the marks came from,
             // so a pointer can only ever select something that is actually on screen.

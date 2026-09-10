@@ -57,6 +57,16 @@ pub struct LabelFit<'a> {
 }
 
 impl LabelFit<'_> {
+    /// How many labels of `sample`'s size the axis has room for, each clearing its neighbour by
+    /// `gap`. At least two: an axis with room for one label is better off showing its two ends.
+    pub fn capacity(&self, sample: &str) -> usize {
+        let each = (self.measure)(sample) + self.gap;
+        if each <= 0.0 {
+            return 2;
+        }
+        ((self.axis_length / each).floor() as usize).max(2)
+    }
+
     /// The fraction of the paper's legibility criterion this label set earns: 1 when every label
     /// clears its neighbour by `gap`, falling to 0 as they collide.
     ///
@@ -270,12 +280,17 @@ pub fn decimals_for_step(step: f64) -> usize {
     12
 }
 
-/// Format one value at a step's precision.
+/// Format one value at a step's precision, in the reader's locale.
+///
+/// Grouped and separated by the locale's own rule (`day_l10n::format_decimal`), because an axis
+/// label is a number a person reads: `1,234,567` in en, `1.234.567` in de. Ungrouped digits stop
+/// being legible somewhere around four of them, which is the whole reason a log axis used to
+/// escape to exponent form as early as it did.
 pub fn format_value(v: f64, step: f64) -> String {
     let d = decimals_for_step(step);
     // `-0` is a real f64 and prints with its sign, which reads as an error on an axis.
     let v = if v == 0.0 { 0.0 } else { v };
-    format!("{v:.d$}")
+    day_l10n::format_decimal(v, d)
 }
 
 fn format_all(values: &[f64], step: f64) -> Vec<String> {
@@ -287,7 +302,7 @@ fn format_all(values: &[f64], step: f64) -> Vec<String> {
 /// A log axis is not a candidate search: its readable labellings are the powers of the base, and
 /// below a handful of decades the 2 and 5 multiples between them. Anything else (a "nice" step in
 /// log space) produces labels like 3.16, which no one reads as a decade.
-pub fn log_ticks(domain: Interval, base: f64, target: usize) -> Labelling {
+pub fn log_ticks(domain: Interval, base: f64, target: usize, fit: &LabelFit<'_>) -> Labelling {
     let lo = domain.lo.max(f64::MIN_POSITIVE);
     let hi = domain.hi.max(lo * base);
     let e0 = (lo.log(base)).floor() as i32;
@@ -312,9 +327,15 @@ pub fn log_ticks(domain: Interval, base: f64, target: usize) -> Labelling {
     }
     values.retain(|v| *v >= domain.lo * 0.999 && *v <= domain.hi * 1.001);
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    // Thin uniformly when even the decades are too many to label.
-    if values.len() > target.max(2) {
-        let stride = values.len().div_ceil(target.max(2));
+    // Thin uniformly when even the decades are too many to label — but "too many" is what the
+    // axis has ROOM for, measured, not a fixed count. A tall axis shows all seven decades of a
+    // million-fold range; a short one drops to every other. Judging by `target` alone dropped
+    // labels an axis had space for, which is the one thing this module exists not to do.
+    let room = fit
+        .capacity(&format_value(domain.hi, 0.0))
+        .max(target.min(2));
+    if values.len() > room {
+        let stride = values.len().div_ceil(room);
         values = values
             .iter()
             .copied()

@@ -97,14 +97,19 @@ pub struct Chrome {
 impl Chrome {
     /// The chrome for a ground of the given darkness. Grid lines are deliberately faint: a grid is
     /// a reading aid, and one that competes with the data for contrast is worse than none.
+    ///
+    /// Labels and titles share one weight, at the platform's secondary-text alpha. Swift Charts
+    /// draws every piece of chart text at a single grey, measured at 154/255 on a dark ground;
+    /// two separate weights put Day's at 199 and 233, bright enough to compete with the marks.
+    /// The data is what should carry the contrast.
     pub fn for_dark(dark: bool) -> Self {
         if dark {
             Chrome {
                 axis_line: Color::rgba(1.0, 1.0, 1.0, 0.45),
                 grid_line: Color::rgba(1.0, 1.0, 1.0, 0.12),
                 tick: Color::rgba(1.0, 1.0, 1.0, 0.45),
-                label: Color::rgba(1.0, 1.0, 1.0, 0.75),
-                title: Color::rgba(1.0, 1.0, 1.0, 0.9),
+                label: Color::rgba(1.0, 1.0, 1.0, 0.55),
+                title: Color::rgba(1.0, 1.0, 1.0, 0.55),
                 plot_background: None,
             }
         } else {
@@ -112,8 +117,8 @@ impl Chrome {
                 axis_line: Color::rgba(0.0, 0.0, 0.0, 0.35),
                 grid_line: Color::rgba(0.0, 0.0, 0.0, 0.10),
                 tick: Color::rgba(0.0, 0.0, 0.0, 0.35),
-                label: Color::rgba(0.0, 0.0, 0.0, 0.65),
-                title: Color::rgba(0.0, 0.0, 0.0, 0.85),
+                label: Color::rgba(0.0, 0.0, 0.0, 0.6),
+                title: Color::rgba(0.0, 0.0, 0.0, 0.6),
                 plot_background: None,
             }
         }

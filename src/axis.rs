@@ -36,11 +36,16 @@ pub enum AxisPosition {
 pub struct AxisSpec {
     pub hidden: bool,
     pub grid: bool,
+    /// A solid line along the axis's own edge. Off by default: Swift Charts draws none, and a
+    /// grid already says where the plot ends. `Chart::axis_rule` puts it back.
+    pub rule: bool,
+    /// A short mark from the axis edge to each label. Off by default, for the same reason.
     pub ticks: bool,
     pub labels: bool,
     pub position: AxisPosition,
-    /// The axis's own name. `None` takes the label from the data column, which is what
-    /// [`crate::data::value`] carries for exactly this purpose.
+    /// The axis's own name, drawn only when the app sets one. A data column's name is NOT used as
+    /// a fallback: under six labels already reading `C1 C2 C3`, a title saying "Category" is noise,
+    /// and it costs a line of plot height. Swift Charts asks for the same thing explicitly.
     pub title: Option<String>,
     /// How many labels to aim for. The tick search treats this as a target to be scored against,
     /// not a promise — an axis too short for five readable labels gets three.
@@ -56,7 +61,8 @@ impl Default for AxisSpec {
         AxisSpec {
             hidden: false,
             grid: true,
-            ticks: true,
+            rule: false,
+            ticks: false,
             labels: true,
             position: AxisPosition::Automatic,
             title: None,
@@ -74,6 +80,7 @@ impl std::fmt::Debug for AxisSpec {
         f.debug_struct("AxisSpec")
             .field("hidden", &self.hidden)
             .field("grid", &self.grid)
+            .field("rule", &self.rule)
             .field("ticks", &self.ticks)
             .field("labels", &self.labels)
             .field("position", &self.position)

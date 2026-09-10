@@ -238,7 +238,7 @@ pub struct Mark {
     pub inner_radius: f64,
     /// Outer radius as a fraction of the available radius.
     pub outer_radius: f64,
-    /// Points trimmed from each angular edge, separating adjacent wedges.
+    /// Points held between each angular edge and its own radial ray, separating adjacent wedges.
     pub angular_inset: f64,
 }
 
@@ -426,7 +426,15 @@ impl Mark {
         self.outer_radius = fraction.clamp(0.0, 1.0);
         self
     }
-    /// Points trimmed from each angular edge, separating adjacent wedges.
+    /// Points held between each angular edge and its own radial ray, separating adjacent wedges.
+    ///
+    /// The distance is perpendicular to the edge, so the channel between two neighbors keeps an
+    /// even width for its whole length rather than tapering shut toward the center. A wedge with
+    /// no hole therefore ends in a blunt tip short of the center, where its two inset edges meet.
+    ///
+    /// Capped at 5% of the wedge's outer radius, which is where Swift Charts stops widening its
+    /// own `angularInset`. The cap is what keeps a gap chosen against a full-page chart from
+    /// swallowing the same chart in a phone-width pane.
     pub fn angular_inset(mut self, points: f64) -> Self {
         self.angular_inset = points.max(0.0);
         self

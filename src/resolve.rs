@@ -39,6 +39,12 @@ pub struct Placed {
     /// Position within the dodging group, and how many there are.
     pub dodge_index: usize,
     pub dodge_count: usize,
+    /// Whether this mark sits at the low and high ends of its own stack. Both are true for
+    /// anything that did not stack, so an unstacked bar or a heat-map cell is its own two ends.
+    /// A bar rounds only the corners at an end that is true, which is what lets a stack read as
+    /// one bar rather than a column of separate lozenges.
+    pub stack_lo: bool,
+    pub stack_hi: bool,
 }
 
 /// Everything the renderer needs.
@@ -179,6 +185,8 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
             series_index,
             dodge_index,
             dodge_count,
+            stack_lo: true,
+            stack_hi: true,
         });
     }
 
@@ -212,6 +220,56 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
         let total = pos_top.get(&key).copied().unwrap_or(0.0);
         out[i].v0 -= total / 2.0;
         out[i].v1 -= total / 2.0;
+    }
+
+    // Now that every segment's extent is final, find the ends of each stack. Only marks that
+    // actually stacked take part: an unstacked bar, an explicit range and a heat-map cell each
+    // keep both ends, which is what the `true` they were pushed with already says. A dodged slot
+    // is its own column, so the group key carries the slot index.
+    let mut ends: BTreeMap<(u8, String, usize), (usize, usize)> = BTreeMap::new();
+    for i in 0..out.len() {
+        let p = &out[i];
+        if !stackable(p.mark.kind)
+            || p.mark.stacking == Stacking::Unstacked
+            || p.mark.y_end.is_some()
+        {
+            continue;
+        }
+        let key = (p.mark.kind as u8, key_of(&p.mark.x), p.dodge_index);
+        let (v_lo, v_hi) = (p.v0.min(p.v1), p.v0.max(p.v1));
+        match ends.get(&key).copied() {
+            None => {
+                ends.insert(key, (i, i));
+            }
+            Some((lo, hi)) => {
+                let low = if v_lo < out[lo].v0.min(out[lo].v1) {
+                    i
+                } else {
+                    lo
+                };
+                let high = if v_hi > out[hi].v0.max(out[hi].v1) {
+                    i
+                } else {
+                    hi
+                };
+                ends.insert(key, (low, high));
+                // Whichever of the three is neither end any more is interior, and stays interior:
+                // an end only ever moves outward, so nothing here can be reinstated later.
+                for j in [lo, hi, i] {
+                    if j != low && j != high {
+                        out[j].stack_lo = false;
+                        out[j].stack_hi = false;
+                    }
+                }
+            }
+        }
+    }
+    // Each winner is an end on ONE side, unless its stack turned out to be a single segment.
+    for (lo, hi) in ends.into_values() {
+        if lo != hi {
+            out[lo].stack_hi = false;
+            out[hi].stack_lo = false;
+        }
     }
     out
 }
@@ -313,26 +371,24 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         trailing: cfg.legend_insets.trailing + em,
     };
     let provisional = guess.apply(size);
-    let (x1, y1) = scales(&placed, &x_data, &y_data, cfg, &y_spec, provisional);
-    let xt1 = axis_ticks(&x1, cfg.x_axis, provisional.size.width, cfg, true);
-    let yt1 = axis_ticks(&y1, cfg.y_axis, provisional.size.height, cfg, false);
+    let mut x_spec = cfg.x_scale.clone();
+    let (x1, y1) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, provisional);
+    let (xt1, x_extent) = axis_ticks(&x1, cfg.x_axis, provisional.size.width, cfg, true);
+    let (yt1, y_extent) = axis_ticks(&y1, cfg.y_axis, provisional.size.height, cfg, false);
+    if let Some(spec) = niced(&x1, &x_spec, x_extent) {
+        x_spec = spec;
+    }
+    if let Some(spec) = niced(&y1, &y_spec, y_extent) {
+        y_spec = spec;
+    }
 
     // --- Pass two: measure those labels and settle ---
-    // A title is drawn whenever the axis has one OR the data column carries a label to fall back
-    // on (`axis_title` in render.rs). The inset has to reserve space on the same condition, or the
-    // fallback title is drawn into whatever sits under the axis — on a legend-at-the-bottom chart,
-    // straight through the legend.
-    // The same rule `render::axis_title` draws by: an app-set title wins, the column's label is
-    // the fallback, and an EMPTY title is how an app declines the fallback — so it reserves no
-    // room either.
-    let titled = |spec: &AxisSpec, fallback: &Option<String>| {
-        spec.title
-            .as_deref()
-            .or(fallback.as_deref())
-            .is_some_and(|t| !t.is_empty())
-    };
-    let x_titled = titled(cfg.x_axis, &x_title);
-    let y_titled = titled(cfg.y_axis, &y_title);
+    // The same rule `render::axis_title` draws by: a title the app set, and nothing else. The
+    // inset has to reserve space on exactly that condition, or a title is drawn into whatever sits
+    // under the axis — on a legend-at-the-bottom chart, straight through the legend.
+    let titled = |spec: &AxisSpec| spec.title.as_deref().is_some_and(|t| !t.is_empty());
+    let x_titled = titled(cfg.x_axis);
+    let y_titled = titled(cfg.y_axis);
     let measure = |s: &str| day_core::measure_text(s, cfg.label_size, &cfg.font).width;
     let widest_y = yt1.iter().map(|t| measure(&t.label)).fold(0.0f64, f64::max);
     let line = day_core::measure_text("0", cfg.label_size, &cfg.font).height;
@@ -398,9 +454,9 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         }
     };
     let plot = insets.apply(size);
-    let (x, y) = scales(&placed, &x_data, &y_data, cfg, &y_spec, plot);
-    let x_ticks = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
-    let y_ticks = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
+    let (x, y) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, plot);
+    let (x_ticks, _) = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
+    let (y_ticks, _) = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
 
     let legend = series
         .iter()
@@ -446,7 +502,7 @@ fn scales(
     placed: &[Placed],
     x_data: &[Datum],
     y_data: &[Datum],
-    cfg: &Config<'_>,
+    x_spec: &ScaleSpec,
     y_spec: &ScaleSpec,
     plot: Rect,
 ) -> (Scale, Scale) {
@@ -458,7 +514,7 @@ fn scales(
         ScaleKind::Linear
     };
     let x = infer(
-        cfg.x_scale,
+        x_spec,
         x_data,
         (plot.origin.x, plot.origin.x + plot.size.width),
         x_default,
@@ -481,14 +537,14 @@ fn axis_ticks(
     axis_length: f64,
     cfg: &Config<'_>,
     horizontal: bool,
-) -> Vec<Tick> {
+) -> (Vec<Tick>, Option<Interval>) {
     if spec.hidden {
-        return Vec::new();
+        return (Vec::new(), None);
     }
     // A discrete axis labels every category: there is nothing to search for, and dropping one
     // would leave a bar unlabelled.
     if scale.kind.is_discrete() {
-        return scale
+        let list = scale
             .categories
             .iter()
             .map(|c| Tick {
@@ -499,46 +555,68 @@ fn axis_ticks(
                 },
             })
             .collect();
+        return (list, None);
     }
 
     if let Some(values) = &spec.values {
-        return values
+        let list = values
             .iter()
             .map(|v| Tick {
                 value: *v,
                 label: label_for(*v, scale, spec, 0.0),
             })
             .collect();
+        return (list, None);
     }
 
-    let labelling = match &scale.kind {
-        ScaleKind::Log { base } => crate::ticks::log_ticks(scale.domain, *base, spec.desired_count),
-        ScaleKind::Time => crate::ticks::time_ticks(scale.domain, spec.desired_count),
-        _ => {
-            // Legibility is judged against the direction the labels actually extend: their width
-            // on a horizontal axis, their line height on a vertical one.
-            let font = cfg.font.clone();
-            let size = cfg.label_size;
-            let measure_h = move |s: &str| day_core::measure_text(s, size, &font).width;
-            let line = day_core::measure_text("0", cfg.label_size, &cfg.font).height;
-            let measure_v = move |_: &str| line;
-            let fit = if horizontal {
-                LabelFit {
-                    axis_length,
-                    gap: cfg.label_size * 0.75,
-                    measure: &measure_h,
-                }
-            } else {
-                LabelFit {
-                    axis_length,
-                    gap: cfg.label_size * 0.9,
-                    measure: &measure_v,
-                }
-            };
-            ticks::extended(scale.domain, spec.desired_count, &fit)
+    // Legibility is judged against the direction the labels actually extend: their width on a
+    // horizontal axis, their line height on a vertical one. Both the searched labelling and the
+    // log axis's decade thinning are decided against it, so it is built before the match.
+    let font = cfg.font.clone();
+    let size = cfg.label_size;
+    let measure_h = move |s: &str| day_core::measure_text(s, size, &font).width;
+    let line = day_core::measure_text("0", cfg.label_size, &cfg.font).height;
+    let measure_v = move |_: &str| line;
+    let fit = if horizontal {
+        LabelFit {
+            axis_length,
+            gap: cfg.label_size * 0.75,
+            measure: &measure_h,
+        }
+    } else {
+        LabelFit {
+            axis_length,
+            gap: cfg.label_size * 0.9,
+            measure: &measure_v,
         }
     };
-    labelling
+    let labelling = match &scale.kind {
+        ScaleKind::Log { base } => {
+            crate::ticks::log_ticks(scale.domain, *base, spec.desired_count, &fit)
+        }
+        ScaleKind::Time => crate::ticks::time_ticks(scale.domain, spec.desired_count),
+        _ => ticks::extended(scale.domain, spec.desired_count, &fit),
+    };
+    // The domain this labelling would rather have: the data's bounds snapped outward to the step
+    // it chose, unioned with its own outer values. The search does not always bracket the data —
+    // a range topping out at 26 gets ticks to 25 and no further — so the step is what guarantees
+    // the last gridline sits at or past the last mark. `niced` decides whether to take it.
+    let wants = {
+        let step = labelling.step;
+        let (mut lo, mut hi) = (scale.domain.lo, scale.domain.hi);
+        if step > 0.0 && step.is_finite() {
+            // The epsilon keeps a bound that already sits ON a tick from being pushed a whole
+            // step further out by its own rounding error.
+            lo = (lo / step + 1e-9).floor() * step;
+            hi = (hi / step - 1e-9).ceil() * step;
+        }
+        if let (Some(a), Some(b)) = (labelling.values.first(), labelling.values.last()) {
+            lo = lo.min(*a);
+            hi = hi.max(*b);
+        }
+        (hi > lo).then(|| Interval::new(lo, hi))
+    };
+    let list = labelling
         .values
         .iter()
         .filter(|v| **v >= scale.domain.lo - 1e-9 && **v <= scale.domain.hi + 1e-9)
@@ -546,7 +624,32 @@ fn axis_ticks(
             value: *v,
             label: label_for(*v, scale, spec, labelling.step),
         })
-        .collect()
+        .collect();
+    (list, wants)
+}
+
+/// Widen an inferred domain out to the ticks that enclose it.
+///
+/// A domain that stops at the data puts the tallest mark against the frame with the top label well
+/// below it. Taking the labelling's own extent, and the data's bounds rounded out to its step, puts
+/// a labelled gridline at each end and gives the marks the headroom a reader expects. Swift Charts rounds outward for the same reason but goes further, far enough to
+/// stretch a scatter's x axis to -50 when no sample is negative; stopping at the enclosing ticks
+/// gets the headroom without inventing a range the data never visits.
+///
+/// Only an INFERRED linear domain moves. An app that pinned one said what it wanted, and a log or
+/// time axis rounds to its own kind of bound — a decade, a calendar boundary — not to a step.
+fn niced(scale: &Scale, spec: &ScaleSpec, wants: Option<Interval>) -> Option<ScaleSpec> {
+    if spec.domain.is_some() || !matches!(scale.kind, ScaleKind::Linear) {
+        return None;
+    }
+    let e = wants?;
+    let (lo, hi) = (e.lo.min(scale.domain.lo), e.hi.max(scale.domain.hi));
+    if hi <= lo || (lo >= scale.domain.lo - 1e-9 && hi <= scale.domain.hi + 1e-9) {
+        return None;
+    }
+    let mut out = spec.clone();
+    out.domain = Some(Interval::new(lo, hi));
+    Some(out)
 }
 
 pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> String {
@@ -561,14 +664,15 @@ pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> St
         ScaleKind::Time => ticks::time_label(v, scale.domain.span()),
         ScaleKind::Log { .. } => {
             // A log axis labels its decades as written numbers while they are short, and switches
-            // to exponent form when they stop being readable.
-            if (0.001..100_000.0).contains(&v) {
+            // to exponent form when they stop being readable. Grouped, a decade stays readable a
+            // long way further than it used to: `1,000,000` is a number, `1000000` is a puzzle.
+            if (0.000_001..1_000_000_000.0).contains(&v) {
                 let d = if v >= 1.0 {
                     0
                 } else {
                     (-v.log10().floor()) as usize
                 };
-                format!("{v:.d$}")
+                day_l10n::format_decimal(v, d)
             } else {
                 format!("1e{}", v.log10().round() as i64)
             }

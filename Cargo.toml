@@ -31,6 +31,10 @@ day-core = { git = "https://github.com/daybrite/day.git" }
 day-pieces = { git = "https://github.com/daybrite/day.git" }
 day-reactive = { git = "https://github.com/daybrite/day.git" }
 day-geometry = { git = "https://github.com/daybrite/day.git" }
+# Axis labels are numbers, and a number is locale-dependent: grouping separators, the decimal
+# mark, and the grouping RULE itself (en-IN groups by lakh). day-l10n already carries the icu4x
+# formatter every Day app links, so this edge adds a call, not a dependency.
+day-l10n = { git = "https://github.com/daybrite/day.git" }
 
 [dev-dependencies]
 day-mock = { git = "https://github.com/daybrite/day.git" }

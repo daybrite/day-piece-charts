@@ -78,8 +78,35 @@ fn labels_print_at_the_precision_the_step_implies() {
 
 #[test]
 fn log_ticks_are_decades() {
-    let l = ticks::log_ticks(Interval::new(1.0, 10_000.0), 10.0, 6);
+    let m = |_: &str| 20.0;
+    let fit = ticks::LabelFit {
+        axis_length: 400.0,
+        gap: 4.0,
+        measure: &m,
+    };
+    let l = ticks::log_ticks(Interval::new(1.0, 10_000.0), 10.0, 6, &fit);
     assert_eq!(l.values, vec![1.0, 10.0, 100.0, 1000.0, 10_000.0]);
+}
+
+#[test]
+fn a_log_axis_thins_its_decades_by_what_fits_not_by_a_fixed_count() {
+    // Seven decades, and a target of five. On a tall axis all seven are labelled; the same range
+    // on a short one drops to every other. The old rule thinned on the target alone and dropped
+    // labels an axis had room for.
+    let m = |_: &str| 14.0;
+    let domain = Interval::new(1.0, 1_000_000.0);
+    let tall = ticks::LabelFit {
+        axis_length: 400.0,
+        gap: 6.0,
+        measure: &m,
+    };
+    assert_eq!(ticks::log_ticks(domain, 10.0, 5, &tall).values.len(), 7);
+    let short = ticks::LabelFit {
+        axis_length: 70.0,
+        gap: 6.0,
+        measure: &m,
+    };
+    assert!(ticks::log_ticks(domain, 10.0, 5, &short).values.len() < 7);
 }
 
 #[test]
@@ -185,6 +212,84 @@ fn bars_stack_in_declaration_order_and_normalize_to_the_whole() {
 }
 
 #[test]
+fn an_inferred_domain_is_widened_to_the_ticks_that_enclose_it() {
+    // A range topping out at 26 used to leave the tallest bar poking past a top gridline at 25;
+    // the domain now rounds out to the step the tick search chose, so the axis ends at 30.
+    let marks: Vec<_> = [16.5, 12.7, 26.0, 22.4]
+        .iter()
+        .enumerate()
+        .map(|(i, v)| bar(value("q", format!("C{i}")), value("v", *v)))
+        .collect();
+    let ticks = y_ticks(marks);
+    let top = ticks.last().expect("a labelled axis").value;
+    assert!(
+        top >= 26.0,
+        "the last gridline sits at or past the last mark: {top}"
+    );
+    assert_eq!(top, 30.0, "rounded out to the tick step, not to the data");
+    assert_eq!(
+        ticks.first().map(|t| t.value),
+        Some(0.0),
+        "bars keep their baseline"
+    );
+}
+
+#[test]
+fn only_the_two_ends_of_a_stack_round_their_corners() {
+    // Rounding every segment turns a stack's middles into lozenges and opens seams between the
+    // colors; only the segments at the two ends carry the radius (README "What it does
+    // carefully"). Three series in one column: bottom, middle, top.
+    let marks = vec![
+        bar(value("q", "Q1"), value("v", 30.0)).by_series(value("s", "A")),
+        bar(value("q", "Q1"), value("v", 40.0)).by_series(value("s", "B")),
+        bar(value("q", "Q1"), value("v", 20.0)).by_series(value("s", "C")),
+    ];
+    let r = resolved(marks, Stacking::Standard);
+    assert_eq!((r[0].stack_lo, r[0].stack_hi), (true, false), "bottom");
+    assert_eq!((r[1].stack_lo, r[1].stack_hi), (false, false), "middle");
+    assert_eq!((r[2].stack_lo, r[2].stack_hi), (false, true), "top");
+}
+
+#[test]
+fn anything_that_did_not_stack_keeps_both_ends() {
+    // An unstacked bar is its own two ends, and so is every cell of a heat map — which shares this
+    // code path and would lose its corners entirely if the grouping caught it.
+    let marks = vec![
+        bar(value("q", "Q1"), value("v", 30.0)).by_series(value("s", "A")),
+        bar(value("q", "Q1"), value("v", 40.0)).by_series(value("s", "B")),
+    ];
+    let r = resolved(marks, Stacking::Unstacked);
+    for (i, p) in r.iter().enumerate() {
+        assert_eq!((p.stack_lo, p.stack_hi), (true, true), "mark {i}");
+    }
+    // One bar alone in its column is both ends of a stack of one.
+    let solo = resolved(
+        vec![bar(value("q", "Q1"), value("v", 30.0))],
+        Stacking::Standard,
+    );
+    assert_eq!((solo[0].stack_lo, solo[0].stack_hi), (true, true));
+}
+
+#[test]
+fn a_stack_crossing_the_baseline_ends_at_its_outermost_segments() {
+    // Positive and negative segments accumulate away from zero in both directions, so the ends of
+    // the stack are the most negative and the most positive, not the first and last declared.
+    let marks = vec![
+        bar(value("q", "Q1"), value("v", 30.0)).by_series(value("s", "A")),
+        bar(value("q", "Q1"), value("v", -20.0)).by_series(value("s", "B")),
+        bar(value("q", "Q1"), value("v", 40.0)).by_series(value("s", "C")),
+    ];
+    let r = resolved(marks, Stacking::Standard);
+    assert_eq!(
+        (r[1].stack_lo, r[1].stack_hi),
+        (true, false),
+        "the negative one"
+    );
+    assert_eq!((r[2].stack_lo, r[2].stack_hi), (false, true), "the top one");
+    assert_eq!((r[0].stack_lo, r[0].stack_hi), (false, false), "interior");
+}
+
+#[test]
 fn negative_values_stack_away_from_the_baseline() {
     let marks = vec![
         bar(value("q", "Q1"), value("v", -20.0)).by_series(value("s", "A")),
@@ -235,6 +340,27 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
+}
+
+/// The y ticks a chart of these marks settles on, at a fixed pane size.
+fn y_ticks(marks: Vec<Mark>) -> Vec<day_piece_charts::ticks::Tick> {
+    let x = ScaleSpec::default();
+    let y = ScaleSpec::default();
+    let ax = AxisSpec::default();
+    let colors = |i: usize, _: &str| day_piece_charts::categorical(i);
+    let cfg = day_piece_charts::resolve::Config {
+        x_scale: &x,
+        y_scale: &y,
+        x_axis: &ax,
+        y_axis: &ax,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: None,
+    };
+    day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
 }
 
 #[test]

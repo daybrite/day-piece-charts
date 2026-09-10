@@ -68,6 +68,21 @@ what a bar is there.
   perceptually uniform respectively, because a chart whose series are told apart by hue has to work
   for readers who cannot distinguish the pretty defaults.
 - **Symbol size is an area**, matching Swift Charts, so twice the value is twice the ink.
+- **A stack rounds only its two ends.** A corner radius applied to every segment turns the middles
+  into lozenges and opens seams between the colors; the segments at the ends of the stack carry it
+  and the internal joins stay square, so the column reads as one bar.
+- **Numeric axis labels are localized** (`day::format_decimal`): grouped by the reader's own rule,
+  so an axis reads `1,000,000` in en and `1.000.000` in de rather than `1000000` everywhere.
+- **An inferred domain is widened to the ticks that enclose it**, so the tallest mark has headroom
+  and both ends of the axis carry a labelled gridline. The tick search already produces a labelling
+  that brackets the data; this stops throwing the outer values away.
+- **Chart chrome is one weight.** Labels and titles share the platform's secondary-text alpha, and
+  there is no axis rule and no tick mark by default — the grid says where the plot is, and the
+  contrast belongs to the data.
+- **A sector's `angular_inset` is a perpendicular distance**, so the channel between two slices
+  keeps an even width the whole way in and a pie with a gap ends in blunt tips short of the center.
+  Spending the inset as one fixed angle instead is cheaper and looks right at the rim, but it
+  tapers the channel shut and lets every slice meet at a point.
 
 ## Selection
 
@@ -128,7 +143,14 @@ are builder methods (`.y_range(start, end)`).
 | `.chartLegend(position: .bottom)` | `.legend(LegendPosition::Bottom)` |
 | `.chartPlotStyle { $0.padding(0) }` | `.plot_insets(Insets::default())`, or `.bare()` for a sparkline |
 | `SectorMark(angle:innerRadius:)` | `sector(angle).inner_radius(0.6)` |
+| `SectorMark(angle:angularInset:)` | `sector(angle).angular_inset(6.0)` |
+| `AxisMarks { AxisTick() }` (opting IN) | `.axis_rules()` — off by default on both sides |
 | `RectangleMark(x:y:)` with two categories | `rect(x, y)` — a heat map cell |
+
+`angular_inset` carries Swift's ceiling too: both stop widening the gap at 5% of the outer radius,
+measured off Swift at two plot radii (4.93% at 68pt, 4.99% at 130pt). The cap earns its place
+independently — it keeps a gap chosen for a full-page chart from swallowing the same chart in a
+phone-width pane. Day-Viz's Polar page is the side-by-side that shows the two agreeing.
 
 ## No native half
 

@@ -250,18 +250,42 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             }
         }
     }
-    if paint.x_axis.grid && !paint.x_axis.hidden && !r.x.kind.is_discrete() {
-        for t in &r.x_ticks {
-            if let Some(x) = r.x.project(&Datum::Number(t.value)) {
-                d.stroke(
-                    Shape::Line(
-                        Point::new(x, plot.origin.y),
-                        Point::new(x, plot.origin.y + plot.size.height),
-                    ),
-                    paint.chrome.grid_line,
-                    1.0,
-                );
+    if paint.x_axis.grid && !paint.x_axis.hidden {
+        // Dashed, and along the category axis they fall BETWEEN the categories rather than
+        // through them — where one band ends and the next begins is what a reader traces a bar
+        // down to. Swift Charts draws both the same way.
+        let dash = StrokeStyle::dashed(1.0, vec![4.0, 4.0]);
+        let xs: Vec<f64> = if r.x.kind.is_discrete() {
+            let step = r.x.step();
+            let mut xs = Vec::with_capacity(r.x.categories.len() + 1);
+            for c in &r.x.categories {
+                if let Some(x) = r.x.project(&Datum::Category(c.clone())) {
+                    xs.push(x - step / 2.0);
+                }
             }
+            if let Some(last) = xs.last().copied() {
+                xs.push(last + step);
+            }
+            xs
+        } else {
+            r.x_ticks
+                .iter()
+                .filter_map(|t| r.x.project(&Datum::Number(t.value)))
+                .collect()
+        };
+        let (lo, hi) = (plot.origin.x - 0.5, plot.origin.x + plot.size.width + 0.5);
+        for x in xs {
+            if x < lo || x > hi {
+                continue;
+            }
+            d.stroke_styled(
+                Shape::Line(
+                    Point::new(x, plot.origin.y),
+                    Point::new(x, plot.origin.y + plot.size.height),
+                ),
+                paint.chrome.grid_line,
+                dash.clone(),
+            );
         }
     }
 }
@@ -300,14 +324,16 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         } else {
             TextVAlign::Top
         };
-        d.stroke(
-            Shape::Line(
-                Point::new(plot.origin.x, y),
-                Point::new(plot.origin.x + plot.size.width, y),
-            ),
-            paint.chrome.axis_line,
-            1.0,
-        );
+        if paint.x_axis.rule {
+            d.stroke(
+                Shape::Line(
+                    Point::new(plot.origin.x, y),
+                    Point::new(plot.origin.x + plot.size.width, y),
+                ),
+                paint.chrome.axis_line,
+                1.0,
+            );
+        }
         for (i, t) in r.x_ticks.iter().enumerate() {
             let x = if r.x.kind.is_discrete() {
                 r.x.project(&Datum::Category(t.label.clone())).or_else(|| {
@@ -340,7 +366,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 );
             }
         }
-        if let Some(title) = axis_title(paint.x_axis, r.x_title.as_deref()) {
+        if let Some(title) = axis_title(paint.x_axis) {
             d.text(
                 title,
                 Point::new(
@@ -372,14 +398,16 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         } else {
             TextAlign::Trailing
         };
-        d.stroke(
-            Shape::Line(
-                Point::new(x, plot.origin.y),
-                Point::new(x, plot.origin.y + plot.size.height),
-            ),
-            paint.chrome.axis_line,
-            1.0,
-        );
+        if paint.y_axis.rule {
+            d.stroke(
+                Shape::Line(
+                    Point::new(x, plot.origin.y),
+                    Point::new(x, plot.origin.y + plot.size.height),
+                ),
+                paint.chrome.axis_line,
+                1.0,
+            );
+        }
         for (i, t) in r.y_ticks.iter().enumerate() {
             let y = if r.y.kind.is_discrete() {
                 r.y.categories
@@ -414,7 +442,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 );
             }
         }
-        if let Some(title) = axis_title(paint.y_axis, r.y_title.as_deref()) {
+        if let Some(title) = axis_title(paint.y_axis) {
             // Rotated a quarter turn, which is the only way a y title fits a narrow margin. The
             // rotation is about the text's own anchor, so the transform is translate-rotate.
             let cx = x + (widest(&r.y_ticks, paint) + 14.0 + line_h / 2.0) * away;
@@ -445,8 +473,8 @@ fn widest(ticks: &[crate::ticks::Tick], paint: &Paint2<'_>) -> f64 {
         .fold(0.0f64, f64::max)
 }
 
-fn axis_title<'a>(spec: &'a AxisSpec, fallback: Option<&'a str>) -> Option<&'a str> {
-    spec.title.as_deref().or(fallback).filter(|t| !t.is_empty())
+fn axis_title(spec: &AxisSpec) -> Option<&str> {
+    spec.title.as_deref().filter(|t| !t.is_empty())
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +488,9 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         return;
     }
     let Some(cx) = center_x(p, r) else { return };
+    // Which of the rectangle's two horizontal edges get a corner radius. A heat-map cell and an
+    // unstacked bar keep both; a stacked segment keeps only the edges at the ends of its stack.
+    let mut round = (true, true);
     let (top, bottom) = if r.y.kind.is_discrete() {
         // A categorical y — a heat map's rows: the cell is centered on its band, as tall as the
         // band less the mark's own height dimension.
@@ -479,6 +510,13 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         // — it projects to an enormous negative and the bar runs off the pane. Clamping puts the
         // baseline on the axis floor, which is what a bar on a log scale actually means.
         let (y0, y1) = (r.y.clamp_to_range(y0), r.y.clamp_to_range(y1));
+        // Which stack end landed on which device edge: the value axis can be inverted, so this is
+        // read off the projection rather than assumed.
+        if (y1 < y0) == (p.v1 > p.v0) {
+            round = (p.stack_hi, p.stack_lo);
+        } else {
+            round = (p.stack_lo, p.stack_hi);
+        }
         (y0.min(y1), y0.max(y1))
     };
     // An explicit x span — a histogram bin, a Gantt bar — is the rectangle's own edges; without
@@ -508,11 +546,40 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         // generous radius degrades instead of inverting the shape.
         .min(rect.size.width / 2.0)
         .min(rect.size.height / 2.0);
-    if radius > 0.0 {
-        d.fill(Shape::RoundedRect(rect, radius), paint);
-    } else {
-        d.fill(Shape::Rect(rect), paint);
+    d.fill(rounded_rect(rect, radius, round.0, round.1), paint);
+}
+
+/// A rectangle rounded on only the edges the caller asks for.
+///
+/// Rounding every segment of a stack turns its middles into lozenges and opens seams between the
+/// colors; rounding only the two ends lets the column read as one bar (README "What it does
+/// carefully"). `Shape::RoundedRect` rounds all four corners, so the mixed case is a path — and
+/// `arc_to` spells each corner as one quarter turn, with a zero radius degenerating to a plain
+/// line into the square corner, which is what makes all four combinations one expression.
+fn rounded_rect(rect: Rect, radius: f64, top: bool, bottom: bool) -> Shape {
+    if radius <= 0.0 || rect.size.width <= 0.0 || rect.size.height <= 0.0 {
+        return Shape::Rect(rect);
     }
+    if top && bottom {
+        return Shape::RoundedRect(rect, radius);
+    }
+    if !top && !bottom {
+        return Shape::Rect(rect);
+    }
+    let (x0, y0) = (rect.origin.x, rect.origin.y);
+    let (x1, y1) = (x0 + rect.size.width, y0 + rect.size.height);
+    let (rt, rb) = (
+        if top { radius } else { 0.0 },
+        if bottom { radius } else { 0.0 },
+    );
+    // Clockwise on screen, which is the direction `arc_to`'s degrees run in device space.
+    PathBuilder::new()
+        .arc_to(Point::new(x0 + rt, y0 + rt), rt, 180.0, 90.0)
+        .arc_to(Point::new(x1 - rt, y0 + rt), rt, 270.0, 90.0)
+        .arc_to(Point::new(x1 - rb, y1 - rb), rb, 0.0, 90.0)
+        .arc_to(Point::new(x0 + rb, y1 - rb), rb, 90.0, 90.0)
+        .close()
+        .build()
 }
 
 fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
@@ -928,46 +995,25 @@ fn draw_symbols(d: &mut Draw, sym: Symbol, at: Vec<Point>, r: f64, color: Color,
     }
 }
 
-/// A wedge between two angles and two radii, as a path.
+/// A wedge between two radii, with its own angular span at each of them.
+///
+/// The two spans differ whenever an angular inset is in force — [`sector`] explains why the inner
+/// one is the narrower.
 ///
 /// Built from cubic beziers rather than an arc primitive so the donut hole, the angular inset and
 /// the corner radius all compose: an arc op would draw the outer edge and leave the join to the
 /// rasterizer's own arc-to-line rule, which differs between backends.
-#[allow(clippy::too_many_arguments)]
-fn wedge(center: Point, r0: f64, r1: f64, a0: f64, a1: f64) -> Shape {
-    let mut b = PathBuilder::new();
-    let arc = |b: PathBuilder, r: f64, from: f64, to: f64, first: bool| {
-        let mut b = b;
-        // A cubic approximates a circular arc well up to a quarter turn; beyond that the error is
-        // visible, so long sweeps are split.
-        let steps = (((to - from).abs() / std::f64::consts::FRAC_PI_2).ceil() as usize).max(1);
-        let d = (to - from) / steps as f64;
-        let mut a = from;
-        if first {
-            b = b.move_to(Point::new(center.x + r * a.cos(), center.y + r * a.sin()));
-        } else {
-            b = b.line_to(Point::new(center.x + r * a.cos(), center.y + r * a.sin()));
-        }
-        for _ in 0..steps {
-            let next = a + d;
-            // The exact tangent length for a circular arc of this sweep.
-            let k = 4.0 / 3.0 * (d / 4.0).tan();
-            let p0 = Point::new(center.x + r * a.cos(), center.y + r * a.sin());
-            let p1 = Point::new(center.x + r * next.cos(), center.y + r * next.sin());
-            let c1 = Point::new(p0.x - k * r * a.sin(), p0.y + k * r * a.cos());
-            let c2 = Point::new(p1.x + k * r * next.sin(), p1.y - k * r * next.cos());
-            b = b.cubic_to(c1, c2, p1);
-            a = next;
-        }
-        b
-    };
-    b = arc(b, r1, a0, a1, true);
-    if r0 > 0.5 {
-        b = arc(b, r0, a1, a0, false);
-    } else {
-        b = b.line_to(center);
-    }
-    b.close().build()
+fn wedge(center: Point, r0: f64, r1: f64, outer: (f64, f64), inner: (f64, f64)) -> Shape {
+    // Out along the far edge, back along the near one — one closed contour. `PathBuilder::arc_to`
+    // takes degrees (docs/canvas.md "Paths"); the geometry here is in radians. A zero inner radius
+    // and a zero-width inner span both collapse to a single point, which `arc_to` reaches with a
+    // plain line: a pie's apex, or the blunt tip an inset wedge ends in.
+    let deg = f64::to_degrees;
+    PathBuilder::new()
+        .arc_to(center, r1, deg(outer.0), deg(outer.1 - outer.0))
+        .arc_to(center, r0, deg(inner.1), deg(inner.0 - inner.1))
+        .close()
+        .build()
 }
 
 fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
@@ -994,27 +1040,85 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let a0 = coord.angle(u0);
     let a1 = coord.angle(u1);
     let center = coord.center(plot);
-    let r_max = coord.radius(plot) * 0.98;
+    // The whole radius the plot allows. There was a 0.98 here, which cost the pie 2% of its size
+    // against a Swift Charts twin in the same pane for no stated reason; a mark that wants to sit
+    // inside the circle says so with `outer_radius`.
+    let r_max = coord.radius(plot);
     let hole = match coord {
         Coordinate::Polar { hole, .. } => hole,
         _ => 0.0,
     };
     let outer = r_max * p.mark.outer_radius;
     let inner = (r_max * hole).max(r_max * p.mark.inner_radius);
-    // The inset is an arc LENGTH, so converting it to an angle depends on the radius; using the
-    // outer radius keeps the visible gap even rather than tapering toward the center.
-    let inset = if outer > 0.0 {
-        p.mark.angular_inset / outer
+    let Some(w) = inset_wedge(p.mark.angular_inset, a0, a1, inner, outer) else {
+        return;
+    };
+    let color = color_of(p, r, paint);
+    d.fill(
+        wedge(center, w.inner, outer, w.outer_span, w.inner_span),
+        color,
+    );
+}
+
+/// The most of its own outer radius a wedge will spend on an angular inset. Measured off Swift
+/// Charts, which stops widening `angularInset` here — at two plot radii 68pt and 130pt it capped
+/// at 4.93% and 4.99% — and the ceiling is worth having on its own: it keeps an inset chosen for
+/// a full-page chart from swallowing the same chart in a phone-width pane.
+const MAX_INSET_FRACTION: f64 = 0.05;
+
+/// One wedge's geometry once its angular inset is applied.
+struct InsetWedge {
+    /// The inner radius the inset pushes the wedge out to — its own hole, or the blunt tip where
+    /// the two inset edges converge, whichever is farther from the center.
+    inner: f64,
+    /// The angular span the wedge keeps at its outer radius, and at [`InsetWedge::inner`]. The
+    /// inner one is the narrower, and collapses to a single angle at a converged tip.
+    outer_span: (f64, f64),
+    inner_span: (f64, f64),
+}
+
+/// Apply an angular inset to one wedge. `None` when the inset has eaten the slice whole.
+///
+/// The inset is a DISTANCE, and it is held perpendicular to the edge, so the channel between two
+/// neighbors keeps an even width the whole way in. The ANGLE that distance costs therefore grows as
+/// the radius shrinks: an edge held `gap` away from its radial ray sits `asin(gap / r)` off it.
+/// Spending a single angle on the whole wedge instead — the outer radius' share, say — tapers the
+/// channel shut and lets every slice meet at the center.
+fn inset_wedge(gap: f64, a0: f64, a1: f64, inner: f64, outer: f64) -> Option<InsetWedge> {
+    let gap = gap.clamp(0.0, outer * MAX_INSET_FRACTION);
+    let span = a1 - a0;
+    let half = span.abs() / 2.0;
+    let sign = if span < 0.0 { -1.0 } else { 1.0 };
+    // Where the two inset edges converge: short of the center, and short of the hole when the hole
+    // is the smaller. Past a half-circle they never converge, and `gap` itself is as close to the
+    // center as either one comes.
+    // A zero-width slice divides by `sin(0)` here and comes back infinite, which is the honest
+    // answer: two coincident edges cross the moment either one is inset, so nothing is left to draw.
+    let r_tip = if gap > 0.0 {
+        gap / half.min(std::f64::consts::FRAC_PI_2).sin()
     } else {
         0.0
     };
-    let (a0, a1) = if (a1 - a0).abs() > 2.0 * inset {
-        (a0 + inset, a1 - inset)
-    } else {
-        (a0, a1)
+    let r_in = inner.max(r_tip);
+    if outer <= r_in {
+        // The gap has eaten the slice whole — a sliver too thin to survive its own inset.
+        return None;
+    }
+    let inset_at = |r: f64| {
+        if gap <= 0.0 {
+            0.0
+        } else if r > gap {
+            (gap / r).asin()
+        } else {
+            std::f64::consts::FRAC_PI_2
+        }
     };
-    let color = color_of(p, r, paint);
-    d.fill(wedge(center, inner, outer, a0, a1), color);
+    let (i_out, i_in) = (inset_at(outer), inset_at(r_in));
+    Some(InsetWedge {
+        inner: r_in,
+        outer_span: (a0 + sign * i_out, a1 - sign * i_out),
+        inner_span: (a0 + sign * i_in, a1 - sign * i_in),
+    })
 }
 
 fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
@@ -1232,5 +1336,109 @@ pub fn draw_guides(
                 font: paint.font.clone(),
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod inset_tests {
+    use super::inset_wedge;
+    use std::f64::consts::{FRAC_PI_2, PI, TAU};
+
+    /// How far the edge at `angle` sits from the ray at `ray`, measured perpendicular to the ray,
+    /// at radius `r`. This is the distance the inset is supposed to hold constant.
+    fn offset(r: f64, angle: f64, ray: f64) -> f64 {
+        r * (angle - ray).sin()
+    }
+
+    #[test]
+    fn no_inset_leaves_the_wedge_alone() {
+        let w = inset_wedge(0.0, 0.0, 1.0, 30.0, 100.0).unwrap();
+        assert_eq!(w.inner, 30.0);
+        assert_eq!(w.outer_span, (0.0, 1.0));
+        assert_eq!(w.inner_span, (0.0, 1.0));
+    }
+
+    #[test]
+    fn the_channel_between_neighbors_keeps_its_width_at_every_radius() {
+        // Two adjacent slices of a five-slice donut, the arrangement from the bug report. The gap
+        // is kept under 5% of the outer radius so the cap does not enter into it.
+        let (gap, step) = (4.0, TAU / 5.0);
+        let a = inset_wedge(gap, 0.0, step, 40.0, 120.0).unwrap();
+        let b = inset_wedge(gap, step, 2.0 * step, 40.0, 120.0).unwrap();
+        assert_eq!(a.inner, 40.0, "a 40pt hole is wider than this inset's tip");
+        assert_eq!(b.inner, 40.0);
+        // Each edge sits `gap` from its own ray, outside and inside alike — so the channel between
+        // the two slices is `2 * gap` wide at both radii, and at every radius between them.
+        let pairs = [
+            (120.0, a.outer_span.1, b.outer_span.0),
+            (a.inner, a.inner_span.1, b.inner_span.0),
+        ];
+        for (r, near, far) in pairs {
+            assert!(
+                (offset(r, near, step).abs() - gap).abs() < 1e-9,
+                "{r}: {near}"
+            );
+            assert!(
+                (offset(r, far, step).abs() - gap).abs() < 1e-9,
+                "{r}: {far}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pie_with_a_gap_stops_short_of_the_center() {
+        // No hole at all: the old code let every slice converge on the center, closing the gap.
+        let (gap, step) = (4.0, TAU / 5.0);
+        let w = inset_wedge(gap, 0.0, step, 0.0, 120.0).unwrap();
+        let expected = gap / (step / 2.0).sin();
+        assert!((w.inner - expected).abs() < 1e-9, "tip radius {}", w.inner);
+        assert!(
+            w.inner > gap,
+            "the tip clears the center by at least the gap"
+        );
+        // The two inset edges have met, so the wedge ends in a point rather than an inner arc.
+        let inn = w.inner_span;
+        assert!((inn.0 - inn.1).abs() < 1e-9, "{inn:?}");
+    }
+
+    #[test]
+    fn a_counter_clockwise_sweep_insets_inward_too() {
+        let out = inset_wedge(4.0, 1.0, 0.0, 30.0, 120.0).unwrap().outer_span;
+        assert!(out.0 < 1.0 && out.1 > 0.0, "{out:?}");
+        assert!(out.0 > out.1, "the span keeps its direction: {out:?}");
+    }
+
+    #[test]
+    fn a_sliver_too_thin_for_its_own_inset_is_dropped() {
+        assert!(inset_wedge(4.0, 0.0, 0.02, 0.0, 120.0).is_none());
+        assert!(inset_wedge(4.0, 0.0, 0.0, 0.0, 120.0).is_none());
+        // Even clamped to 5% of the radius, an inset can outgrow a thin enough slice.
+        assert!(inset_wedge(200.0, 0.0, 0.1, 0.0, 120.0).is_none());
+    }
+
+    #[test]
+    fn the_inset_is_capped_at_a_share_of_the_radius() {
+        // Swift Charts stops widening `angularInset` at 5% of the outer radius; past that, asking
+        // for more gap changes nothing. Below it the number is spent in full.
+        let below = inset_wedge(4.0, 0.0, 1.0, 0.0, 120.0).unwrap();
+        assert!((offset(120.0, below.outer_span.0, 0.0) - 4.0).abs() < 1e-9);
+        for asked in [6.0, 8.0, 40.0] {
+            let w = inset_wedge(asked, 0.0, 1.0, 0.0, 120.0).unwrap();
+            let spent = offset(120.0, w.outer_span.0, 0.0);
+            assert!((spent - 6.0).abs() < 1e-9, "asked {asked}, spent {spent}");
+        }
+        // The cap follows the radius, so a pane half the size gets half the gap.
+        let small = inset_wedge(8.0, 0.0, 1.0, 0.0, 60.0).unwrap();
+        assert!((offset(60.0, small.outer_span.0, 0.0) - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_wedge_past_a_half_circle_never_converges() {
+        // `asin` tops out at a right angle, so edges this far apart stay apart; the closest either
+        // comes to the center is the gap itself.
+        let w = inset_wedge(4.0, 0.0, PI * 1.5, 0.0, 120.0).unwrap();
+        assert!((w.inner - 4.0).abs() < 1e-9, "{}", w.inner);
+        let inn = w.inner_span;
+        assert!((inn.0 - FRAC_PI_2).abs() < 1e-9, "{inn:?}");
     }
 }
