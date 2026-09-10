@@ -91,6 +91,8 @@ pub type SeriesColors = Rc<dyn Fn(usize, &str) -> Color>;
 
 /// Answers a scale's domain from inside the chart's binding; `None` leaves it inferred.
 pub type DomainFn = Rc<dyn Fn() -> Option<(f64, f64)>>;
+/// A [`Chart::configure`] closure, named for the same reason [`DomainFn`] is.
+type ConfigureFn = Rc<dyn Fn(&mut ChartConfig)>;
 
 /// A chart. Build it with [`chart`], configure it with the builder methods, and place it like any
 /// other piece — it grows to fill, so give it a `.frame(w, h)` or let its container size it.
@@ -109,6 +111,7 @@ pub struct Chart {
     plot_insets: Option<Insets>,
     x_domain_fn: Option<DomainFn>,
     y_domain_fn: Option<DomainFn>,
+    configure_fn: Option<ConfigureFn>,
     select: Option<Signal<Option<select::Selection>>>,
     snap: select::Snap,
     guides: select::Guides,
@@ -135,6 +138,7 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         plot_insets: None,
         x_domain_fn: None,
         y_domain_fn: None,
+        configure_fn: None,
         select: None,
         snap: select::Snap::default(),
         guides: select::Guides::NONE,
@@ -164,6 +168,28 @@ impl Chart {
     /// Pin the y domain to whatever the closure answers, re-asked inside the chart's binding.
     pub fn y_domain_with(mut self, f: impl Fn() -> Option<(f64, f64)> + 'static) -> Self {
         self.y_domain_fn = Some(Rc::new(f));
+        self
+    }
+    /// Adjust the scales and axes on every draw, inside the chart's own binding.
+    ///
+    /// The marks closure already re-runs whenever a signal it reads changes; this is the same for
+    /// the chart's SHAPE. Everything set through the plain builders is fixed when the piece is
+    /// built, so a control bound to one of them — a log/linear picker, a tick-count slider, a grid
+    /// switch — moves and the chart does not, unless something else happens to rebuild the piece.
+    ///
+    /// The closure is handed the configuration as the builders left it, with any
+    /// [`Chart::y_domain_with`] already applied, and may change whatever it likes:
+    ///
+    /// ```ignore
+    /// chart(marks).configure(move |c| {
+    ///     c.y_axis.desired_count = ticks.get();
+    ///     if log.get() {
+    ///         c.y_scale.kind = Some(ScaleKind::Log { base: 10.0 });
+    ///     }
+    /// })
+    /// ```
+    pub fn configure(mut self, f: impl Fn(&mut ChartConfig) + 'static) -> Self {
+        self.configure_fn = Some(Rc::new(f));
         self
     }
     /// Pin the x categories, and their order.
@@ -505,6 +531,18 @@ fn draw_legend(
     }
 }
 
+/// The parts of a chart's configuration that [`Chart::configure`] may change between draws.
+///
+/// One struct rather than a reactive setter per knob: a chart has a lot of shape, and an app that
+/// puts any of it under live control needs the same escape hatch for all of it.
+#[derive(Clone, Debug)]
+pub struct ChartConfig {
+    pub x_scale: ScaleSpec,
+    pub y_scale: ScaleSpec,
+    pub x_axis: AxisSpec,
+    pub y_axis: AxisSpec,
+}
+
 impl Piece for Chart {
     fn build(self, cx: &mut BuildCx) -> RNode {
         let Chart {
@@ -522,6 +560,7 @@ impl Piece for Chart {
             plot_insets,
             x_domain_fn,
             y_domain_fn,
+            configure_fn,
             select,
             snap,
             guides,
@@ -556,6 +595,22 @@ impl Piece for Chart {
             let mut y_scale = y_scale.clone();
             if let Some(f) = &y_domain_fn {
                 y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+            }
+            // Read inside the binding, so every signal the closure touches re-records the chart.
+            let mut x_axis = x_axis.clone();
+            let mut y_axis = y_axis.clone();
+            if let Some(f) = &configure_fn {
+                let mut cfg = ChartConfig {
+                    x_scale,
+                    y_scale,
+                    x_axis,
+                    y_axis,
+                };
+                f(&mut cfg);
+                x_scale = cfg.x_scale;
+                y_scale = cfg.y_scale;
+                x_axis = cfg.x_axis;
+                y_axis = cfg.y_axis;
             }
 
             // The legend is measured first: it takes its space out of the pane before the plot

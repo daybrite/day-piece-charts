@@ -683,7 +683,12 @@ pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> St
             // A log axis labels its decades as written numbers while they are short, and switches
             // to exponent form when they stop being readable. Grouped, a decade stays readable a
             // long way further than it used to: `1,000,000` is a number, `1000000` is a puzzle.
-            if (0.000_001..1_000_000_000.0).contains(&v) {
+            //
+            // The choice is made for the WHOLE axis, from its domain, not per label: deciding per
+            // value puts `1e12` directly above `100,000,000` on the same axis, which reads as two
+            // different scales rather than one.
+            let readable = |x: f64| x == 0.0 || (0.000_001..1e13).contains(&x.abs());
+            if readable(scale.domain.lo) && readable(scale.domain.hi) {
                 let d = if v >= 1.0 {
                     0
                 } else {

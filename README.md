@@ -88,6 +88,31 @@ what a bar is there.
   Spending the inset as one fixed angle instead is cheaper and looks right at the rim, but it
   tapers the channel shut and lets every slice meet at a point.
 
+## Configuration that changes while the app runs
+
+The marks closure re-runs whenever a signal it reads changes, so data under live control just works.
+A chart's SHAPE is different: everything set through the plain builders is fixed when the piece is
+built, and a piece is built once. A log/linear picker, a tick-count slider or a grid switch bound to
+one of those moves while the chart sits still.
+
+`Chart::configure` is the same reactivity for the shape — it runs inside the chart's own binding:
+
+```rust
+chart(marks).configure(move |c| {
+    c.y_axis.desired_count = ticks.get();
+    c.x_axis.grid = grid.get();
+    if log.get() {
+        c.y_scale.kind = Some(ScaleKind::Log { base: 10.0 });
+        c.y_scale.domain = Some(Interval::new(0.5, top.get()));
+    }
+})
+```
+
+It is handed the whole [`ChartConfig`] — both scales and both axes — rather than there being a
+reactive setter per knob, because a chart has a lot of shape and an app that puts any of it under
+live control tends to want the same escape hatch for the rest. `x_domain_with` / `y_domain_with`
+remain for the common case of a domain that follows a range picker.
+
 ## Selection
 
 A chart turns a point back into data and draws guides for it. The app owns the selection; the

@@ -266,6 +266,28 @@ fn the_axis_top_never_falls_as_the_data_grows() {
 }
 
 #[test]
+fn a_log_axis_labels_every_tick_the_same_way() {
+    // Twelve decades: the top used to read `1e12` directly above `100,000,000`, which reads as two
+    // scales stacked on one axis. The written/exponent choice belongs to the axis, not the value.
+    let marks: Vec<_> = (0..12)
+        .map(|i| bar(value("q", format!("C{i}")), value("v", 10f64.powi(i))))
+        .collect();
+    let labels: Vec<String> = log_y_ticks(marks, 1e12)
+        .into_iter()
+        .map(|t| t.label)
+        .collect();
+    let exponent = labels.iter().filter(|l| l.contains('e')).count();
+    assert!(
+        exponent == 0 || exponent == labels.len(),
+        "mixed forms on one axis: {labels:?}"
+    );
+    assert!(
+        labels.iter().any(|l| l.contains(',')),
+        "a trillion still reads as digits: {labels:?}"
+    );
+}
+
+#[test]
 fn the_reported_bar_axis_jump_stays_fixed() {
     // The three settings from the report, as stacked totals: 149 gave an axis to 150, 152 to 200,
     // and 158 dropped BACK to 160 because the tick step had moved from 50 to 40 underneath it.
@@ -409,6 +431,31 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
+}
+
+/// The y ticks of a LOG chart pinned to `0.5..=top`, the shape the Scales page draws.
+fn log_y_ticks(marks: Vec<Mark>, top: f64) -> Vec<day_piece_charts::ticks::Tick> {
+    let x = ScaleSpec::default();
+    let y = ScaleSpec {
+        kind: Some(ScaleKind::Log { base: 10.0 }),
+        domain: Some(day_piece_charts::Interval::new(0.5, top)),
+        ..Default::default()
+    };
+    let ax = AxisSpec::default();
+    let colors = |i: usize, _: &str| day_piece_charts::categorical(i);
+    let cfg = day_piece_charts::resolve::Config {
+        x_scale: &x,
+        y_scale: &y,
+        x_axis: &ax,
+        y_axis: &ax,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: None,
+    };
+    day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
 }
 
 /// The y ticks a chart of these marks settles on, at a fixed pane size.
