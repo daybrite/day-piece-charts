@@ -373,12 +373,12 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     let provisional = guess.apply(size);
     let mut x_spec = cfg.x_scale.clone();
     let (x1, y1) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, provisional);
-    let (xt1, x_extent) = axis_ticks(&x1, cfg.x_axis, provisional.size.width, cfg, true);
-    let (yt1, y_extent) = axis_ticks(&y1, cfg.y_axis, provisional.size.height, cfg, false);
-    if let Some(spec) = niced(&x1, &x_spec, x_extent) {
+    let xt1 = axis_ticks(&x1, cfg.x_axis, provisional.size.width, cfg, true);
+    let yt1 = axis_ticks(&y1, cfg.y_axis, provisional.size.height, cfg, false);
+    if let Some(spec) = niced(&x1, &x_spec) {
         x_spec = spec;
     }
-    if let Some(spec) = niced(&y1, &y_spec, y_extent) {
+    if let Some(spec) = niced(&y1, &y_spec) {
         y_spec = spec;
     }
 
@@ -455,8 +455,8 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     };
     let plot = insets.apply(size);
     let (x, y) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, plot);
-    let (x_ticks, _) = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
-    let (y_ticks, _) = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
+    let x_ticks = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
+    let y_ticks = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
 
     let legend = series
         .iter()
@@ -537,14 +537,14 @@ fn axis_ticks(
     axis_length: f64,
     cfg: &Config<'_>,
     horizontal: bool,
-) -> (Vec<Tick>, Option<Interval>) {
+) -> Vec<Tick> {
     if spec.hidden {
-        return (Vec::new(), None);
+        return Vec::new();
     }
     // A discrete axis labels every category: there is nothing to search for, and dropping one
     // would leave a bar unlabelled.
     if scale.kind.is_discrete() {
-        let list = scale
+        return scale
             .categories
             .iter()
             .map(|c| Tick {
@@ -555,18 +555,16 @@ fn axis_ticks(
                 },
             })
             .collect();
-        return (list, None);
     }
 
     if let Some(values) = &spec.values {
-        let list = values
+        return values
             .iter()
             .map(|v| Tick {
                 value: *v,
                 label: label_for(*v, scale, spec, 0.0),
             })
             .collect();
-        return (list, None);
     }
 
     // Legibility is judged against the direction the labels actually extend: their width on a
@@ -597,26 +595,7 @@ fn axis_ticks(
         ScaleKind::Time => crate::ticks::time_ticks(scale.domain, spec.desired_count),
         _ => ticks::extended(scale.domain, spec.desired_count, &fit),
     };
-    // The domain this labelling would rather have: the data's bounds snapped outward to the step
-    // it chose, unioned with its own outer values. The search does not always bracket the data —
-    // a range topping out at 26 gets ticks to 25 and no further — so the step is what guarantees
-    // the last gridline sits at or past the last mark. `niced` decides whether to take it.
-    let wants = {
-        let step = labelling.step;
-        let (mut lo, mut hi) = (scale.domain.lo, scale.domain.hi);
-        if step > 0.0 && step.is_finite() {
-            // The epsilon keeps a bound that already sits ON a tick from being pushed a whole
-            // step further out by its own rounding error.
-            lo = (lo / step + 1e-9).floor() * step;
-            hi = (hi / step - 1e-9).ceil() * step;
-        }
-        if let (Some(a), Some(b)) = (labelling.values.first(), labelling.values.last()) {
-            lo = lo.min(*a);
-            hi = hi.max(*b);
-        }
-        (hi > lo).then(|| Interval::new(lo, hi))
-    };
-    let list = labelling
+    labelling
         .values
         .iter()
         .filter(|v| **v >= scale.domain.lo - 1e-9 && **v <= scale.domain.hi + 1e-9)
@@ -624,26 +603,64 @@ fn axis_ticks(
             value: *v,
             label: label_for(*v, scale, spec, labelling.step),
         })
-        .collect();
-    (list, wants)
+        .collect()
 }
 
-/// Widen an inferred domain out to the ticks that enclose it.
+/// The "nice numbers" an axis bound is allowed to land on, within each power of ten.
+///
+/// A fixed ladder is what makes the bound MONOTONE in the data: the smallest rung at or above a
+/// value can only rise as that value rises. Deriving the bound from the tick step instead cannot
+/// promise that, because the step is itself chosen from the data — a stacked bar reaching 152 got
+/// a step of 50 and an axis to 200, and the same bar reaching 158 got a step of 40 and an axis to
+/// 160, so growing the data made the axis SHRINK and every bar jump upward.
+const NICE: [f64; 10] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0];
+
+/// The smallest nice number at or above `v`, and the largest at or below it. Both are
+/// non-decreasing in `v`, which is the property the axis inherits.
+fn nice_bound(v: f64, up: bool) -> f64 {
+    if v == 0.0 || !v.is_finite() {
+        return v;
+    }
+    if v < 0.0 {
+        // Mirrored: rounding a negative bound "up" moves it toward zero, which is the SMALLER
+        // magnitude, so the direction flips with the sign.
+        return -nice_bound(-v, !up);
+    }
+    let decade = 10f64.powf(v.log10().floor());
+    let m = v / decade;
+    // A bound already sitting on a rung stays there: the epsilon keeps its own rounding error
+    // from pushing it a whole rung further out.
+    let rung = if up {
+        NICE.iter().find(|r| **r >= m - 1e-9)
+    } else {
+        NICE.iter().rev().find(|r| **r <= m + 1e-9)
+    };
+    rung.copied().unwrap_or(m) * decade
+}
+
+/// Round an inferred domain outward to the nearest nice bounds.
 ///
 /// A domain that stops at the data puts the tallest mark against the frame with the top label well
-/// below it. Taking the labelling's own extent, and the data's bounds rounded out to its step, puts
-/// a labelled gridline at each end and gives the marks the headroom a reader expects. Swift Charts rounds outward for the same reason but goes further, far enough to
-/// stretch a scatter's x axis to -50 when no sample is negative; stopping at the enclosing ticks
-/// gets the headroom without inventing a range the data never visits.
+/// below it. Rounding out gives the marks headroom and puts a labelled gridline at each end — and
+/// because [`nice_bound`] reads only the data, the axis can grow as the data grows but never fall
+/// back, which is what a reader watching a live chart needs: bars that shrink when nothing shrank
+/// are worse than bars with too much headroom.
 ///
 /// Only an INFERRED linear domain moves. An app that pinned one said what it wanted, and a log or
-/// time axis rounds to its own kind of bound — a decade, a calendar boundary — not to a step.
-fn niced(scale: &Scale, spec: &ScaleSpec, wants: Option<Interval>) -> Option<ScaleSpec> {
+/// time axis rounds to its own kind of bound — a decade, a calendar boundary — not to a rung.
+fn niced(scale: &Scale, spec: &ScaleSpec) -> Option<ScaleSpec> {
     if spec.domain.is_some() || !matches!(scale.kind, ScaleKind::Linear) {
         return None;
     }
-    let e = wants?;
-    let (lo, hi) = (e.lo.min(scale.domain.lo), e.hi.max(scale.domain.hi));
+    // Only a domain that REACHES ZERO is rounded, because the ladder is anchored there. A bar or
+    // area chart is exactly that case and it is the one that needed the headroom. A floating range
+    // is left alone: 980..1000 is a price chart, and the nearest rung below 980 is 800, which
+    // would flatten the whole line into a ribbon along the top of the plot.
+    if scale.domain.lo > 0.0 || scale.domain.hi < 0.0 {
+        return None;
+    }
+    let lo = nice_bound(scale.domain.lo, false);
+    let hi = nice_bound(scale.domain.hi, true);
     if hi <= lo || (lo >= scale.domain.lo - 1e-9 && hi <= scale.domain.hi + 1e-9) {
         return None;
     }

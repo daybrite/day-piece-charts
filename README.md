@@ -73,9 +73,13 @@ what a bar is there.
   and the internal joins stay square, so the column reads as one bar.
 - **Numeric axis labels are localized** (`day::format_decimal`): grouped by the reader's own rule,
   so an axis reads `1,000,000` in en and `1.000.000` in de rather than `1000000` everywhere.
-- **An inferred domain is widened to the ticks that enclose it**, so the tallest mark has headroom
-  and both ends of the axis carry a labelled gridline. The tick search already produces a labelling
-  that brackets the data; this stops throwing the outer values away.
+- **A zero-anchored domain rounds out to a nice number**, so the tallest bar has headroom instead
+  of touching the frame. The rung comes from a fixed 1-1.5-2-2.5-3-4-5-6-8 ladder read off the data
+  alone, which is what makes the bound MONOTONE: an axis can grow as the data grows but never fall
+  back. Deriving it from the tick step cannot promise that — the step is itself chosen from the
+  data, so a total of 152 got a step of 50 and an axis to 200 while 158 got a step of 40 and an axis
+  to 160, and growing the data made every bar jump upward. A floating range is left at the data's
+  own extent: the nearest rung below 980 is 800, which would flatten a price chart into a ribbon.
 - **Chart chrome is one weight.** Labels and titles share the platform's secondary-text alpha, and
   there is no axis rule and no tick mark by default — the grid says where the plot is, and the
   contrast belongs to the data.

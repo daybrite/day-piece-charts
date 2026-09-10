@@ -235,6 +235,75 @@ fn an_inferred_domain_is_widened_to_the_ticks_that_enclose_it() {
 }
 
 #[test]
+fn the_axis_top_never_falls_as_the_data_grows() {
+    // Sweep a bar's height through a wide range and read back the top gridline. The axis may jump
+    // outward as the data grows; it must never jump back DOWN, because a reader watching a live
+    // chart sees the bars shrink when nothing shrank.
+    let top_for = |v: f64| {
+        y_ticks(vec![bar(value("q", "C1"), value("v", v))])
+            .last()
+            .expect("a labelled axis")
+            .value
+    };
+    let mut worst: Option<(f64, f64, f64)> = None;
+    let mut prev = top_for(1.0);
+    let mut v = 1.0;
+    while v < 400.0 {
+        v += 0.5;
+        let top = top_for(v);
+        if top < prev - 1e-9 && worst.is_none() {
+            worst = Some((v, prev, top));
+        }
+        prev = top;
+    }
+    assert!(
+        worst.is_none(),
+        "the axis top dropped: at data {:?} it went from {:?} to {:?}",
+        worst.map(|w| w.0),
+        worst.map(|w| w.1),
+        worst.map(|w| w.2),
+    );
+}
+
+#[test]
+fn the_reported_bar_axis_jump_stays_fixed() {
+    // The three settings from the report, as stacked totals: 149 gave an axis to 150, 152 to 200,
+    // and 158 dropped BACK to 160 because the tick step had moved from 50 to 40 underneath it.
+    let top_for = |v: f64| {
+        y_ticks(vec![bar(value("q", "C1"), value("v", v))])
+            .last()
+            .expect("a labelled axis")
+            .value
+    };
+    assert_eq!(top_for(149.0), 150.0);
+    assert_eq!(top_for(152.0), 200.0);
+    assert_eq!(top_for(158.0), 200.0, "this used to fall back to 160");
+}
+
+#[test]
+fn a_negative_axis_grows_downward_without_rising() {
+    // The same guarantee mirrored: as the data reaches further below zero the bottom of the axis
+    // can only fall. The rounding is anchored at zero, so the sign flips the direction with it.
+    let bottom_for = |v: f64| {
+        y_ticks(vec![bar(value("q", "C1"), value("v", v))])
+            .first()
+            .expect("a labelled axis")
+            .value
+    };
+    let mut prev = bottom_for(-1.0);
+    let mut v = -1.0;
+    while v > -400.0 {
+        v -= 0.5;
+        let bottom = bottom_for(v);
+        assert!(
+            bottom <= prev + 1e-9,
+            "at {v} the axis bottom rose to {bottom} from {prev}"
+        );
+        prev = bottom;
+    }
+}
+
+#[test]
 fn only_the_two_ends_of_a_stack_round_their_corners() {
     // Rounding every segment turns a stack's middles into lozenges and opens seams between the
     // colors; only the segments at the two ends carry the radius (README "What it does
