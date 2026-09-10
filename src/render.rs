@@ -1068,3 +1068,169 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         },
     );
 }
+
+// ---------------------------------------------------------------------------
+// Selection: the hit model a draw leaves behind, and the guides drawn for one
+// ---------------------------------------------------------------------------
+
+/// Every mark's device position and labels, for the pointer to hit
+/// (README.md "Selection").
+///
+/// Built from the SAME `Resolved` the marks were just drawn from, so a selection can only ever
+/// name something on screen, and a pointer move costs a scan of this rather than a re-resolve.
+pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
+    let polar = r.coordinate.is_polar();
+    // The axis's own tick step decides how many decimals a value reads with, so a selected value
+    // is rounded exactly like the axis label above it — "58.2", not "58.15339133". The exact
+    // number is still on `SelectedValue::value` for an app that wants full precision.
+    let step_of = |ticks: &[crate::ticks::Tick]| match ticks {
+        [a, b, ..] => (b.value - a.value).abs(),
+        _ => 0.0,
+    };
+    let (x_step, y_step) = (step_of(&r.x_ticks), step_of(&r.y_ticks));
+    let marks = r
+        .marks
+        .iter()
+        .filter_map(|p| {
+            let x = center_x(p, r)?;
+            let y = r.y.project(&Datum::Number(p.v1))?;
+            let series = r.series.get(p.series_index).cloned().unwrap_or_default();
+            Some(crate::select::HitMark {
+                at: device(r, x + p.mark.offset.0, y + p.mark.offset.1, polar),
+                color: color_of(p, r, paint),
+                x_label: x_label_of(p, r, paint, x_step),
+                y_label: crate::resolve::label_for(p.v1, &r.y, paint.y_axis, y_step),
+                value: p.v1,
+                series,
+            })
+        })
+        .collect();
+    crate::select::HitModel {
+        plot: r.plot,
+        marks,
+    }
+}
+
+/// A mark's own x as a label: its category on a discrete axis, its value formatted by the axis's
+/// own formatter otherwise — so the guide's label reads exactly like the axis under it.
+fn x_label_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>, step: f64) -> String {
+    match p.mark.x.as_ref().map(|v| &v.datum) {
+        Some(Datum::Category(c)) => match &paint.x_axis.format {
+            Some(f) => f(&Datum::Category(c.clone())),
+            None => c.clone(),
+        },
+        Some(Datum::Number(v) | Datum::Time(v)) => {
+            crate::resolve::label_for(*v, &r.x, paint.x_axis, step)
+        }
+        _ => String::new(),
+    }
+}
+
+/// The rules, rings and label box for the current selection.
+///
+/// Drawn last, over the marks: a guide that a mark can cover is not a guide. The label box is
+/// placed on whichever side of the rule has room and then clamped into the plot, so it never
+/// hangs off the edge at either extreme of the axis.
+pub fn draw_guides(
+    d: &mut Draw,
+    r: &Resolved,
+    paint: &Paint2<'_>,
+    sel: &crate::select::Selection,
+    guides: crate::select::Guides,
+) {
+    let plot = r.plot;
+    let rule = paint.chrome.label.with_alpha(0.55);
+    if guides.vertical {
+        d.stroke(
+            Shape::Line(
+                Point::new(sel.at.x, plot.origin.y),
+                Point::new(sel.at.x, plot.origin.y + plot.size.height),
+            ),
+            rule,
+            1.0,
+        );
+    }
+    if guides.horizontal {
+        d.stroke(
+            Shape::Line(
+                Point::new(plot.origin.x, sel.at.y),
+                Point::new(plot.origin.x + plot.size.width, sel.at.y),
+            ),
+            rule,
+            1.0,
+        );
+    }
+    if guides.points {
+        // A ring rather than a filled dot: the mark underneath stays visible, which is what says
+        // "this one" instead of covering the thing being pointed at.
+        for v in &sel.values {
+            d.stroke(circle(v.at, 5.0), v.color, 2.0);
+        }
+    }
+    if !guides.label {
+        return;
+    }
+    // The box: the position on the first line, then one line per selected series.
+    let size = paint.label_size;
+    let mut lines: Vec<(String, Color)> = vec![(sel.x_label.clone(), paint.chrome.title)];
+    for v in &sel.values {
+        let text = if v.series.is_empty() {
+            v.label.clone()
+        } else {
+            format!("{}  {}", v.series, v.label)
+        };
+        lines.push((text, v.color));
+    }
+    let line_h = day_core::measure_text("0", size, &paint.font).height;
+    let w = lines
+        .iter()
+        .map(|(t, _)| day_core::measure_text(t, size, &paint.font).width)
+        .fold(0.0f64, f64::max);
+    let pad = 6.0;
+    let (bw, bh) = (w + pad * 2.0, line_h * lines.len() as f64 + pad * 2.0);
+    // Right of the rule where it fits, left otherwise — then clamped, so an extreme selection
+    // keeps the whole box inside the plot instead of half of it outside.
+    let mut bx = sel.at.x + 10.0;
+    if bx + bw > plot.origin.x + plot.size.width {
+        bx = sel.at.x - 10.0 - bw;
+    }
+    bx = bx.clamp(
+        plot.origin.x,
+        (plot.origin.x + plot.size.width - bw).max(plot.origin.x),
+    );
+    let by = (sel.at.y - bh / 2.0).clamp(
+        plot.origin.y,
+        (plot.origin.y + plot.size.height - bh).max(plot.origin.y),
+    );
+    d.fill(
+        Shape::RoundedRect(Rect::new(bx, by, bw, bh), 5.0),
+        // The plot's own ground where it has one, so the box reads as part of the chart; the
+        // page's otherwise, which is what a chart with a transparent plot sits on.
+        paint
+            .chrome
+            .plot_background
+            .unwrap_or(if day_core::dark_mode() {
+                Color::rgba(0.11, 0.11, 0.13, 1.0)
+            } else {
+                Color::rgba(1.0, 1.0, 1.0, 1.0)
+            })
+            .with_alpha(0.94),
+    );
+    d.stroke(
+        Shape::RoundedRect(Rect::new(bx, by, bw, bh), 5.0),
+        rule,
+        1.0,
+    );
+    for (i, (text, color)) in lines.iter().enumerate() {
+        d.text(
+            text,
+            Point::new(bx + pad, by + pad + line_h * i as f64),
+            TextStyle {
+                size,
+                color: *color,
+                anchor: TextAnchor::LEADING,
+                font: paint.font.clone(),
+            },
+        );
+    }
+}

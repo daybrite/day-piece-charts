@@ -69,6 +69,47 @@ what a bar is there.
   for readers who cannot distinguish the pretty defaults.
 - **Symbol size is an area**, matching Swift Charts, so twice the value is twice the ink.
 
+## Selection
+
+A chart turns a point back into data and draws guides for it. The app owns the selection; the
+chart writes it and reads it back:
+
+```rust
+let sel = Signal::new(None);
+
+chart(marks)
+    .select(sel)                    // what the pointer is over, or None
+    .snap(Snap::NearestX)           // or Snap::NearestMark
+    .guides(Guides::RULE)           // or CROSSHAIR, or a struct of your own
+```
+
+Two-way, like a slider's value — so the same selection can drive a readout, a detail pane or
+anything else by reading the signal it already owns, and `.select(sel)` alone reports without
+changing the picture (`Guides::NONE` is the default).
+
+**`Snap` is the question "what did they mean by that point".** `NearestX` finds the nearest
+position along x and reports EVERY series' value there — a scrub along a line chart reading all
+the series at once, which is what a time series wants. `NearestMark` finds the single nearest mark
+in both axes, within reach, and reports only that — what a scatter wants, where two points sharing
+an x are unrelated.
+
+**`Guides` compose**: a vertical rule, a horizontal one, a ring on each selected mark, and a label
+box naming the position and the values. `Guides::RULE` is the line-chart set, `Guides::CROSSHAIR`
+the scatter set. Values in the box are formatted by the chart's own `x_format`/`y_format` and
+rounded by the **axis's own tick step**, so the box reads exactly like the axis beside it — and
+`SelectedValue::value` carries the unrounded number for an app that wants to compute.
+
+**Three gestures feed it, and all three are needed.** `on_hover` is the desktop idiom but is
+pointer-only; `on_tap_at` is what a phone has; `on_drag` is what a press that travels becomes —
+and on some backends what a press that barely travels becomes too, so it is also how a finger
+scrubs. All three write the same value, so a backend reporting two of them for one press changes
+nothing. Nothing is cleared when a drag ends: a touch device has no pointer to leave with, so the
+last selection stands until the next press.
+
+Hit testing runs against **what was drawn**, not a re-resolve: the draw already projected every
+mark, so a pointer move costs a scan of that rather than the whole pipeline — the tick search
+included — for every motion.
+
 ## Reading it against Swift Charts
 
 The vocabulary tracks Swift Charts' 2D marks closely enough to port a chart by eye. Two differences

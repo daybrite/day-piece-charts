@@ -549,7 +549,7 @@ fn axis_ticks(
         .collect()
 }
 
-fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> String {
+pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> String {
     if let Some(f) = &spec.format {
         let d = match scale.kind {
             ScaleKind::Time => Datum::Time(v),

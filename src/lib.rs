@@ -60,6 +60,7 @@ pub mod mark;
 pub mod render;
 pub mod resolve;
 pub mod scale;
+pub mod select;
 pub mod style;
 pub mod ticks;
 
@@ -80,6 +81,7 @@ use std::rc::Rc;
 
 use day_core::{BuildCx, Piece, RNode};
 use day_pieces::{Draw, TextStyle};
+use day_reactive::Signal;
 use day_spec::props::TextAlign;
 use day_spec::{CanvasFont, Color, Point, Rect, Shape, Size, TextAnchor, TextVAlign};
 
@@ -107,6 +109,9 @@ pub struct Chart {
     plot_insets: Option<Insets>,
     x_domain_fn: Option<DomainFn>,
     y_domain_fn: Option<DomainFn>,
+    select: Option<Signal<Option<select::Selection>>>,
+    snap: select::Snap,
+    guides: select::Guides,
 }
 
 /// A chart of the marks the closure produces.
@@ -130,6 +135,9 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         plot_insets: None,
         x_domain_fn: None,
         y_domain_fn: None,
+        select: None,
+        snap: select::Snap::default(),
+        guides: select::Guides::NONE,
     }
 }
 
@@ -227,6 +235,40 @@ impl Chart {
         self.plot_insets = Some(Insets::default());
         self
     }
+    /// Report what the pointer is over into `sig`, and read the same signal to draw
+    /// [`guides`](Chart::guides) for it (README.md "Selection").
+    ///
+    /// Two-way, like a slider's value: the chart writes, the chart reads, and the app owns the
+    /// signal — so the same selection can drive a readout, a detail pane or anything else without
+    /// the chart knowing. `None` means nothing is selected, which is what a pointer leaving the
+    /// plot writes.
+    ///
+    /// Fed by a tap, a drag and a hover together, because no one of them covers every device: a
+    /// hover is pointer-only, a tap is what a phone has, and a press that wiggles a pixel becomes
+    /// a drag on some backends. All three write the same value, so a backend reporting two of them
+    /// for one press changes nothing.
+    pub fn select(mut self, sig: Signal<Option<select::Selection>>) -> Self {
+        self.select = Some(sig);
+        self
+    }
+
+    /// How a point becomes a selection: the nearest x with every series' value there
+    /// ([`Snap::NearestX`](select::Snap::NearestX), the default — a line chart), or the single
+    /// nearest mark ([`Snap::NearestMark`](select::Snap::NearestMark) — a scatter).
+    pub fn snap(mut self, snap: select::Snap) -> Self {
+        self.snap = snap;
+        self
+    }
+
+    /// What the chart draws for the current selection —
+    /// [`Guides::RULE`](select::Guides::RULE), [`Guides::CROSSHAIR`](select::Guides::CROSSHAIR),
+    /// or a struct of your own. The default draws nothing, so `.select(sig)` alone reports without
+    /// changing the picture.
+    pub fn guides(mut self, guides: select::Guides) -> Self {
+        self.guides = guides;
+        self
+    }
+
     /// Replace the measured margins with fixed ones. The default insets are computed from the
     /// axis labels the chart is about to draw; a chart with no axes wants none of that room, and
     /// a chart whose marks overhang the plot (a fat point at the last sample) wants a little.
@@ -450,11 +492,21 @@ impl Piece for Chart {
             plot_insets,
             x_domain_fn,
             y_domain_fn,
+            select,
+            snap,
+            guides,
         } = self;
+
+        // What the last draw positioned, for the pointer to hit (`select::HitModel`). Shared
+        // between the draw closure that fills it and the gesture handlers that read it — hit
+        // testing runs against what was DRAWN rather than re-resolving the whole pipeline on
+        // every pointer move.
+        let hits: Rc<std::cell::RefCell<select::HitModel>> = Rc::default();
 
         // A chart fills what it is given: the whole point of measuring the axis per draw is that
         // the size is the container's to decide, so the leaf grows rather than asking for an
         // intrinsic size the data cannot know.
+        let hits_draw = hits.clone();
         day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
             if size.width <= 2.0 || size.height <= 2.0 {
                 return;
@@ -521,7 +573,61 @@ impl Piece for Chart {
             if let Some(lb) = lb {
                 draw_legend(d, &series, &lb, label_size, &font, ch.label);
             }
+            // Record the hit model AFTER drawing, from the same `resolved` the marks came from,
+            // so a pointer can only ever select something that is actually on screen.
+            if select.is_some() {
+                *hits_draw.borrow_mut() = render::hit_model(&resolved, &paint);
+            }
+            // The guides are drawn from the signal, so they follow the pointer without the app
+            // rebuilding anything: this read subscribes the whole recording to the selection.
+            if let Some(sig) = &select
+                && guides != select::Guides::NONE
+                && let Some(sel) = sig.get()
+            {
+                render::draw_guides(d, &resolved, &paint, &sel, guides);
+            }
         }))
+        .on_hover({
+            let hits = hits.clone();
+            let sig = select;
+            move |at| {
+                if let Some(sig) = &sig {
+                    // Leaving clears it — which is why the handler takes an `Option` rather than
+                    // a phase to match on.
+                    let next = at.and_then(|p| hits.borrow().resolve(p, snap));
+                    if sig.get_untracked() != next {
+                        sig.set(next);
+                    }
+                }
+            }
+        })
+        .on_tap_at({
+            let hits = hits.clone();
+            let sig = select;
+            move |p| {
+                if let Some(sig) = &sig {
+                    let next = hits.borrow().resolve(p, snap);
+                    if sig.get_untracked() != next {
+                        sig.set(next);
+                    }
+                }
+            }
+        })
+        .on_drag({
+            let hits = hits.clone();
+            let sig = select;
+            // A finger scrubbing along the plot: every phase re-selects, so the label tracks the
+            // drag. Nothing is cleared at the end — a touch device has no pointer to leave with,
+            // so the last selection stands until the next press, which is what a reader wants.
+            move |drag| {
+                if let Some(sig) = &sig {
+                    let next = hits.borrow().resolve(drag.location, snap);
+                    if sig.get_untracked() != next {
+                        sig.set(next);
+                    }
+                }
+            }
+        })
         .build(cx)
     }
 }
