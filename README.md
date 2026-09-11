@@ -8,231 +8,159 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 [![ci](https://github.com/daybrite/day-piece-charts/actions/workflows/ci.yml/badge.svg)](https://github.com/daybrite/day-piece-charts/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MPL--2.0-green.svg)](LICENSE)
 
-Charts for [Day](https://daybrite.dev) apps: a grammar-of-graphics API drawn on the canvas.
+## Overview and capabilities
 
-```rust
-use day_piece_charts::*;
+`day-piece-charts` draws interactive charts in Day applications using Day's canvas.
 
-chart(move || {
-    sales.get().iter().map(|s| {
-        bar(value("Month", s.month.clone()), value("Revenue", s.revenue))
-            .by_series(value("Region", s.region.clone()))
-    }).collect()
-})
-.y_label("Revenue (USD)")
-.legend(LegendPosition::Bottom)
-.frame(480.0, 280.0)
+[Day](https://github.com/daybrite/day) is a Rust framework for building applications
+from a shared codebase using each platform's native UI toolkit. A **piece** is a UI
+component you place in a layout; a **part** provides a capability without drawing UI.
+Day's `day` command builds and packages the Rust code, resources, and native platform
+code together. `Cargo.toml` declares Rust dependencies; `Day.toml` configures the app
+and its target platforms.
+
+Build a chart by combining **marks** (bars, lines, points, areas, rectangles, rules,
+or sectors) with named data values. Scales map data to positions, axes explain the
+scales, and a coordinate system determines how the marks appear. This approach is
+called a grammar of graphics: the same components make grouped bars, time series,
+scatter plots, heat maps, pies, and donuts.
+
+Capabilities include stacking and grouping, linear/log/power/time/category scales,
+custom labels and colors, legends, annotations, gradients, and pointer/touch
+selection. Data read from Day signals updates automatically. Numeric axis labels
+use Day's locale-aware number formatting, and chart styling follows light/dark
+appearance unless overridden.
+
+## Platform support and limitations
+
+The crate has no platform-specific renderer or backend features. It records Day
+canvas drawing commands, so it can render on the desktop, mobile, and web backends
+where Day provides a canvas. The host mock backend supports logic tests, not a
+visible chart. The included demo targets iOS/UIKit and Android/Material.
+
+Chart layout and drawing logic are shared across platforms; text measurement and
+input still depend on the backend. Canvas labels are drawn content, rather than
+individual native text controls. Provide an accessible textual summary or data
+view when users need to read chart values without seeing the canvas.
+
+Charts need a nonzero layout size: give them a frame or a container that allocates
+space. Ordinary builder options are set at construction. For changing axis/scale
+configuration, use `.configure(...)`, `.x_domain_with(...)`, or `.y_domain_with(...)`.
+The marks closure is reactive by itself. For large datasets, account for full chart
+re-recording on data/size changes and scans of the drawn marks during selection;
+there is no separate native chart engine handling those operations.
+
+## Add it to a Day project
+
+Add the crate to your app's `Cargo.toml`:
+
+```toml
+[dependencies]
+day-piece-charts = { git = "https://github.com/daybrite/day-piece-charts.git" }
 ```
 
-## Not a chart type — a composition
+Return a chart from your UI function, then place it in the app's layout:
 
-The design follows Wilkinson's *Grammar of Graphics*, the lineage Swift Charts and ggplot2 both
-come from. A chart is not picked from a list of types; it is assembled:
+```rust
+use day::prelude::*;
+use day_piece_charts::{bar, chart, value};
 
-| stage | here |
+fn sales_chart() -> impl Piece {
+    chart(|| vec![
+        bar(value("Month", "Jan"), value("Revenue", 120.0)),
+        bar(value("Month", "Feb"), value("Revenue", 180.0)),
+        bar(value("Month", "Mar"), value("Revenue", 150.0)),
+    ])
+    .y_label("Revenue (USD)")
+    .frame(480.0, 280.0)
+}
+```
+
+Read a `Signal` inside the closure to make the data live. A signal holds observable
+state; Day reruns bindings that read it when its value changes. Use `.by_series(...)`
+on marks to assign a series and `.by_position(...)` to place grouped bars side by side.
+
+No permissions, native packages, assets, or chart-specific feature forwarding are
+required. Build with your app's configured Day target, for example
+`day build -p android-mdc`, or run `day launch -p ios-uikit` with the corresponding
+SDK installed. The [demo](demo/) is a complete Day project showing five chart styles.
+
+### Selection and reactive configuration
+
+Import selection types from `day_piece_charts::select`. This example reports the
+selected month and draws a guide; the app can also read `selected` to show details:
+
+```rust
+use day::prelude::*;
+use day_piece_charts::{bar, chart, value};
+use day_piece_charts::select::{Guides, Snap};
+
+fn selectable_chart() -> impl Piece {
+    let selected = Signal::new(None);
+    let tick_count = Signal::new(5usize);
+    chart(|| vec![
+        bar(value("Month", "Jan"), value("Revenue", 120.0)),
+        bar(value("Month", "Feb"), value("Revenue", 180.0)),
+    ])
+    .configure(move |config| config.y_axis.desired_count = tick_count.get())
+    .select(selected)
+    .snap(Snap::NearestX)
+    .guides(Guides::RULE)
+    .frame(480.0, 280.0)
+}
+```
+
+`NearestX` selects values across series at the nearest x position; `NearestMark`
+selects one nearby mark, useful for scatter plots. `.select(...)` alone adds no
+visual guides. Hover, tap, and drag feed selection; leaving with a pointer clears
+it, while ending a touch drag retains it.
+
+## Architecture and dependencies
+
+Dependency links below lead to upstream source repositories or official API
+documentation. Version requirements describe this checkout's [Cargo.toml](Cargo.toml),
+not necessarily the newest upstream releases.
+
+The implementation is a Rust pipeline that ends in a Day `Draw` display list:
+
+| Source | Responsibility |
 |---|---|
-| variables | `value("Revenue", 42.0)`, `time("Date", secs)`, `date("Date", "2026-07-01")` |
-| marks | `bar` `line` `area` `point` `rect` `rule_x` `rule_y` `sector` |
-| position adjustment | `Stacking::{Standard, Normalized, Center, Unstacked}`, `.by_position(…)` to dodge |
-| scales | `Linear` `Log` `Power` `Time` `Band` `Point` |
-| guides | `AxisSpec`, `AxisPosition`, `LegendPosition` |
-| coordinates | `Coordinate::Cartesian`, `Coordinate::polar()`, `Coordinate::donut(0.6)` |
+| [data.rs](src/data.rs), [mark.rs](src/mark.rs) | Typed values, intervals, dates, mark constructors, and styling options. |
+| [resolve.rs](src/resolve.rs), [scale.rs](src/scale.rs) | Infer domains/categories, resolve stacking/grouping, and map data through scales. |
+| [ticks.rs](src/ticks.rs), [axis.rs](src/axis.rs), [layout.rs](src/layout.rs) | Choose ticks, measure labels, and reserve plot margins. |
+| [coord.rs](src/coord.rs), [render.rs](src/render.rs) | Project Cartesian/polar coordinates and emit drawing commands. |
+| [select.rs](src/select.rs) | Resolve input against a hit model derived from the drawn geometry. |
+| [style.rs](src/style.rs), [lib.rs](src/lib.rs) | Palettes, public builders, reactive configuration, canvas integration, and guides. |
 
-A heat map is a `rect` whose x *and* y are categories: both scales become bands and each cell fills
-its own. `.gradient(top, bottom)` fades an area or bar, `.rounded()` gives a line round caps and
-joins, and `.annotation_color(…)` lets a cell's text pick a color that reads on its fill.
+Tick selection scores candidate labels for simplicity, coverage, density, and
+measured legibility. Calendar ticks align to month/year boundaries. Monotone curves
+use Fritsch–Carlson interpolation. Bar/area domain inference includes the baseline,
+and explicitly pinned domains clip marks at the plot boundary. Polar projection
+turns stacked bars into wedges, allowing pie/donut charts to share the pipeline.
+Default palettes include Okabe–Ito for categories and Viridis for sequential values.
 
-Because the coordinate system is a transformation applied *after* the marks are positioned, a pie
-chart is a normalized stacked bar in polar coordinates — and that is literally the implementation.
-There is no pie-chart code path, and a bar mark in polar space comes out as a wedge because that is
-what a bar is there.
+Direct runtime dependencies are all Day crates: [day-core](https://github.com/daybrite/day/tree/main/crates/day-core) for piece/tree and text
+measurement, [day-spec](https://github.com/daybrite/day/tree/main/crates/day-spec) for shared drawing types, [day-pieces](https://github.com/daybrite/day/tree/main/crates/day-pieces) for canvas/builders,
+[day-reactive](https://github.com/daybrite/day/tree/main/crates/day-reactive) for bindings, [day-geometry](https://github.com/daybrite/day/tree/main/crates/day-geometry) for geometry, and [day-l10n](https://github.com/daybrite/day/tree/main/crates/day-l10n) for localized
+numbers. The latter uses Day's [ICU4X](https://github.com/unicode-org/icu4x) formatting infrastructure transitively.
+There is no third-party plotting library, JavaScript chart package, SwiftPM package,
+or Gradle dependency added by this crate. [day-mock](https://github.com/daybrite/day/tree/main/crates/day-mock) is a development dependency.
+See [Cargo.toml](Cargo.toml) for the direct dependency declarations.
 
-## What it does carefully
+## Compatibility and development
 
-- **Tick selection is the extended Wilkinson algorithm** (Talbot, Lin & Hanrahan, InfoVis 2010):
-  candidate labellings scored on simplicity, coverage, density and legibility, rather than dividing
-  the range by five. The legibility term is computed from *measured* text against the axis's real
-  pixel length, so an axis relabels itself as the pane resizes.
-- **Time axes walk the calendar**, not seconds: months and years are found through the proleptic
-  Gregorian conversion, so a monthly tick lands on the first of the month in leap years too.
-- **Monotone interpolation is Fritsch–Carlson**, whose tangent clamp is what guarantees a spline
-  through non-negative data never dips below zero on the way between two points.
-- **Bars and areas include their baseline** in the inferred domain. A bar chart that crops it
-  exaggerates every difference, which is the most common way a chart misleads.
-- **Bars on a time axis are sized by their closest pair**: a year of daily volume draws as 250
-  bars that touch nothing, instead of a fixed share of the axis that would pile them up.
-- **A pinned domain clips**. Marks outside a `.y_domain(…)` the app set are cut at the plot edge
-  rather than drawn over the axis labels; an inferred axis is never clipped, so a fat point at the
-  last sample keeps its far half.
-- **The default palette is Okabe–Ito** and the sequential ramp is Viridis — colorblind-safe and
-  perceptually uniform respectively, because a chart whose series are told apart by hue has to work
-  for readers who cannot distinguish the pretty defaults.
-- **Symbol size is an area**, matching Swift Charts, so twice the value is twice the ink.
-- **A stack rounds only its two ends.** A corner radius applied to every segment turns the middles
-  into lozenges and opens seams between the colors; the segments at the ends of the stack carry it
-  and the internal joins stay square, so the column reads as one bar.
-- **Numeric axis labels are localized** (`day::format_decimal`): grouped by the reader's own rule,
-  so an axis reads `1,000,000` in en and `1.000.000` in de rather than `1000000` everywhere.
-- **A zero-anchored domain rounds out to a nice number**, so the tallest bar has headroom instead
-  of touching the frame. The rung comes from a fixed 1-1.5-2-2.5-3-4-5-6-8 ladder read off the data
-  alone, which is what makes the bound MONOTONE: an axis can grow as the data grows but never fall
-  back. Deriving it from the tick step cannot promise that — the step is itself chosen from the
-  data, so a total of 152 got a step of 50 and an axis to 200 while 158 got a step of 40 and an axis
-  to 160, and growing the data made every bar jump upward. A floating range is left at the data's
-  own extent: the nearest rung below 980 is 800, which would flatten a price chart into a ribbon.
-- **Chart chrome is one weight.** Labels and titles share the platform's secondary-text alpha, and
-  there is no axis rule and no tick mark by default — the grid says where the plot is, and the
-  contrast belongs to the data.
-- **A sector's `angular_inset` is a perpendicular distance**, so the channel between two slices
-  keeps an even width the whole way in and a pie with a gap ends in blunt tips short of the center.
-  Spending the inset as one fixed angle instead is cheaper and looks right at the rim, but it
-  tapers the channel shut and lets every slice meet at a point.
+This checkout requires Rust 1.89 or newer and declares compatibility with Day 0.4 in
+[Cargo.toml](Cargo.toml). The crate is consumed from Git, not crates.io. Its Day
+dependencies use `https://github.com/daybrite/day.git` without a branch, tag, or
+revision. Use the same source in your app and keep its `Cargo.lock` to record the
+resolved revisions. Mixing Day source URLs or refs can introduce duplicate framework
+crates and incompatible types.
 
-## Configuration that changes while the app runs
+For a local framework checkout, run `day patch --local ../day` from this repository
+(adjust the path when running from `demo/`). The [demo](demo/) depends on this crate
+by path and is a complete integration example.
 
-The marks closure re-runs whenever a signal it reads changes, so data under live control just works.
-A chart's SHAPE is different: everything set through the plain builders is fixed when the piece is
-built, and a piece is built once. A log/linear picker, a tick-count slider or a grid switch bound to
-one of those moves while the chart sits still.
-
-`Chart::configure` is the same reactivity for the shape — it runs inside the chart's own binding:
-
-```rust
-chart(marks).configure(move |c| {
-    c.y_axis.desired_count = ticks.get();
-    c.x_axis.grid = grid.get();
-    if log.get() {
-        c.y_scale.kind = Some(ScaleKind::Log { base: 10.0 });
-        c.y_scale.domain = Some(Interval::new(0.5, top.get()));
-    }
-})
-```
-
-It is handed the whole [`ChartConfig`] — both scales and both axes — rather than there being a
-reactive setter per knob, because a chart has a lot of shape and an app that puts any of it under
-live control tends to want the same escape hatch for the rest. `x_domain_with` / `y_domain_with`
-remain for the common case of a domain that follows a range picker.
-
-## Selection
-
-A chart turns a point back into data and draws guides for it. The app owns the selection; the
-chart writes it and reads it back:
-
-```rust
-let sel = Signal::new(None);
-
-chart(marks)
-    .select(sel)                    // what the pointer is over, or None
-    .snap(Snap::NearestX)           // or Snap::NearestMark
-    .guides(Guides::RULE)           // or CROSSHAIR, or a struct of your own
-```
-
-Two-way, like a slider's value — so the same selection can drive a readout, a detail pane or
-anything else by reading the signal it already owns, and `.select(sel)` alone reports without
-changing the picture (`Guides::NONE` is the default).
-
-**`Snap` is the question "what did they mean by that point".** `NearestX` finds the nearest
-position along x and reports EVERY series' value there — a scrub along a line chart reading all
-the series at once, which is what a time series wants. `NearestMark` finds the single nearest mark
-in both axes, within reach, and reports only that — what a scatter wants, where two points sharing
-an x are unrelated.
-
-**`Guides` compose**: a vertical rule, a horizontal one, a ring on each selected mark, and a label
-box naming the position and the values. `Guides::RULE` is the line-chart set, `Guides::CROSSHAIR`
-the scatter set. Values in the box are formatted by the chart's own `x_format`/`y_format` and
-rounded by the **axis's own tick step**, so the box reads exactly like the axis beside it — and
-`SelectedValue::value` carries the unrounded number for an app that wants to compute.
-
-**Three gestures feed it, and all three are needed.** `on_hover` is the desktop idiom but is
-pointer-only; `on_tap_at` is what a phone has; `on_drag` is what a press that travels becomes —
-and on some backends what a press that barely travels becomes too, so it is also how a finger
-scrubs. All three write the same value, so a backend reporting two of them for one press changes
-nothing. Nothing is cleared when a drag ends: a touch device has no pointer to leave with, so the
-last selection stands until the next press.
-
-Hit testing runs against **what was drawn**, not a re-resolve: the draw already projected every
-mark, so a pointer move costs a scan of that rather than the whole pipeline — the tick search
-included — for every motion.
-
-## Reading it against Swift Charts
-
-The vocabulary tracks Swift Charts' 2D marks closely enough to port a chart by eye. Two differences
-come from Rust and from Day's API style: constructors take two positional, conventionally-ordered
-arguments (`x` then `y`), and Swift's labelled initializer variants — `BarMark(x:yStart:yEnd:)` —
-are builder methods (`.y_range(start, end)`).
-
-| Swift Charts | day-piece-charts |
-|---|---|
-| `BarMark(x:y:)` | `bar(x, y)` |
-| `.foregroundStyle(by: .value("Region", r))` | `.by_series(value("Region", r))` |
-| `.position(by:)` | `.by_position(…)` |
-| `.interpolationMethod(.monotone)` | `.interpolation(Interpolation::Monotone)` |
-| `.chartYScale(domain: 0...100)` | `.y_domain(0.0, 100.0)` |
-| `.chartYAxis { AxisMarks(position: .trailing) }` | `.y_axis_trailing()` |
-| `.chartLegend(position: .bottom)` | `.legend(LegendPosition::Bottom)` |
-| `.chartPlotStyle { $0.padding(0) }` | `.plot_insets(Insets::default())`, or `.bare()` for a sparkline |
-| `SectorMark(angle:innerRadius:)` | `sector(angle).inner_radius(0.6)` |
-| `SectorMark(angle:angularInset:)` | `sector(angle).angular_inset(6.0)` |
-| `AxisMarks { AxisTick() }` (opting IN) | `.axis_rules()` — off by default on both sides |
-| `RectangleMark(x:y:)` with two categories | `rect(x, y)` — a heat map cell |
-
-`angular_inset` carries Swift's ceiling too: both stop widening the gap at 5% of the outer radius,
-measured off Swift at two plot radii (4.93% at 68pt, 4.99% at 130pt). The cap earns its place
-independently — it keeps a gap chosen for a full-page chart from swallowing the same chart in a
-phone-width pane. Day-Viz's Polar page is the side-by-side that shows the two agreeing.
-
-## No native half
-
-Every chart is recorded as a `Draw` display list and replayed by whichever backend the app runs on,
-so this crate has no per-toolkit code and no backend features. A chart looks the same on all nine
-targets because it *is* the same. The cost is that it draws rather than delegating: there is no
-native chart control on any platform to delegate to.
-
-## Compatibility
-
-| This crate | Tested against day | Toolkits |
-|---|---|---|
-| 0.4 | 0.4 (`main`, at its newest revision on every CI run) | every target Day draws a canvas on |
-
-Every day dependency names the bare canonical URL with no branch or tag, and your app's
-`Cargo.lock` picks one day revision for the whole graph. Cargo unifies a git dependency only when
-URL and ref match, so a crate that pinned a tag would double every day crate in an app on `main`.
-`[package.metadata.day] compat = "0.4"` records the minor this release was tested against, and
-`day build` notes a mismatch before compiling.
-
-To build against a fork of day, patch the canonical URL once in your app and this crate follows:
-
-```sh
-day patch --git https://github.com/acme/day.git@acme
-```
-
-## Develop it
-
-```sh
-cargo test                                            # the grammar arithmetic, on the host
-cd demo && day launch -p ios-uikit --script dayscript/charts.yaml
-cd demo && day launch -p android-mdc --script dayscript/charts.yaml
-```
-
-The [demo app](demo/) depends on this crate by path and draws the same two series five ways —
-grouped bars, monotone lines, a stack, a donut, and a heat map. Its walkthrough asserts what the chart derives
-before it draws, since a canvas has no text for a script to read, and captures the drawing as
-screenshots. CI runs it on the iOS Simulator and the Android emulator on every push, and daily
-against day's newest `main`. To work against a local day checkout, `day patch --local ../day` in
-either directory writes a gitignored patch table.
-
-CI also compiles the crate for `aarch64-apple-ios-sim`, `aarch64-linux-android` and
-`wasm32-unknown-unknown` on every push, which is what keeps the "same on every target" claim
-above honest.
-
-Extending Day is documented at
-[daybrite.dev/docs/extending](https://daybrite.dev/docs/extending).
-
-## Part of Day
-
-This crate is one piece of [Day](https://daybrite.dev), a Rust framework for building apps out of
-each platform's own widgets — AppKit, UIKit, Android's Material widgets, GTK 4, Qt 6, XAML, and
-ArkUI — from one codebase.
-
-New to Day? Start at [daybrite.dev](https://daybrite.dev), or browse the
-[source repository](https://github.com/daybrite/day).
+Run `cargo test` for the grammar, geometry, and rendering-model checks. From `demo/`,
+run `day launch -p ios-uikit --script dayscript/charts.yaml` or use `-p android-mdc`.
+The walkthrough checks derived values and captures screenshots; inspect those for
+visual correctness because canvas text is not available as native label nodes.
