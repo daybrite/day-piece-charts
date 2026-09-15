@@ -19,7 +19,7 @@ on:
   schedule:
     # Daily: day's main moves on weeks nobody pushes here, and the canvas duties this crate draws
     # through are the ones most likely to move under it.
-    - cron: "0 5 * * *"
+    - cron: "0 8 * * *"
 
 permissions:
   contents: write # release-asset upload on tag builds
