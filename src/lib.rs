@@ -1,12 +1,12 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 
-//! day-piece-charts — charts for Day apps, built on the grammar of graphics and drawn on the
+//! day-piece-charts: charts for Day apps, built on the grammar of graphics and drawn on the
 //! canvas.
 //!
 //! An external Day Piece with **no native half**. A chart is recorded as a `Draw` display list and
 //! replayed by whichever backend the app runs on, so it looks the same on all nine targets because
-//! it *is* the same — there is no per-toolkit chart code to drift.
+//! it *is* the same; there is no per-toolkit chart code to drift.
 //!
 //! # The grammar
 //!
@@ -23,15 +23,15 @@
 //! | coordinates | [`Coordinate::Cartesian`], [`Coordinate::polar`] |
 //!
 //! Because the coordinate system is a transformation applied after positioning, a pie chart is a
-//! normalized stacked bar in polar coordinates — and that is literally how it is implemented. There
+//! normalized stacked bar in polar coordinates, and that is literally how it is implemented. There
 //! is no pie-chart code path.
 //!
 //! # Reading it against Swift Charts
 //!
 //! The mark and modifier vocabulary tracks Swift Charts closely enough to port a chart by eye, with
-//! two deliberate differences that come from Rust and from Day's API style (docs/api-style.md):
+//! two differences that come from Rust and from Day's API style (docs/api-style.md):
 //! constructors take two positional, conventionally-ordered arguments (`x` then `y`), and Swift's
-//! labelled initializer variants — `BarMark(x:yStart:yEnd:)` — are builder methods
+//! labelled initializer variants (`BarMark(x:yStart:yEnd:)`) are builder methods
 //! ([`Mark::y_range`]).
 //!
 //! ```ignore
@@ -95,7 +95,7 @@ pub type DomainFn = Rc<dyn Fn() -> Option<(f64, f64)>>;
 type ConfigureFn = Rc<dyn Fn(&mut ChartConfig)>;
 
 /// A chart. Build it with [`chart`], configure it with the builder methods, and place it like any
-/// other piece — it grows to fill, so give it a `.frame(w, h)` or let its container size it.
+/// other piece: it grows to fill, so give it a `.frame(w, h)` or let its container size it.
 pub struct Chart {
     marks: Rc<dyn Fn() -> Vec<Mark>>,
     x_scale: ScaleSpec,
@@ -120,7 +120,7 @@ pub struct Chart {
 /// A chart of the marks the closure produces.
 ///
 /// The closure is re-run as a reactive binding, so reading a `Signal` inside it makes the chart
-/// follow that signal — which is how a chart animates, filters, or re-sorts without any imperative
+/// follow that signal, which is how a chart animates, filters, or re-sorts without any imperative
 /// update call.
 pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
     Chart {
@@ -158,7 +158,7 @@ impl Chart {
         self.y_scale.domain = Some(Interval::new(lo, hi));
         self
     }
-    /// Pin the x domain to whatever the closure answers, re-asked inside the chart's binding —
+    /// Pin the x domain to whatever the closure answers, re-asked inside the chart's binding,
     /// so a domain that follows a signal (a range picker) tracks it the way the marks do.
     /// `None` leaves the domain inferred.
     pub fn x_domain_with(mut self, f: impl Fn() -> Option<(f64, f64)> + 'static) -> Self {
@@ -173,9 +173,9 @@ impl Chart {
     /// Adjust the scales and axes on every draw, inside the chart's own binding.
     ///
     /// The marks closure already re-runs whenever a signal it reads changes; this is the same for
-    /// the chart's SHAPE. Everything set through the plain builders is fixed when the piece is
-    /// built, so a control bound to one of them — a log/linear picker, a tick-count slider, a grid
-    /// switch — moves and the chart does not, unless something else happens to rebuild the piece.
+    /// the chart's shape. Everything set through the plain builders is fixed when the piece is
+    /// built, so a control bound to one of them (a log/linear picker, a tick-count slider, a grid
+    /// switch) moves and the chart does not, unless something else happens to rebuild the piece.
     ///
     /// The closure is handed the configuration as the builders left it, with any
     /// [`Chart::y_domain_with`] already applied, and may change whatever it likes:
@@ -239,7 +239,7 @@ impl Chart {
         self.y_axis.hidden = true;
         self
     }
-    /// Draw the y axis on the trailing edge — the convention for a price chart, where the latest
+    /// Draw the y axis on the trailing edge, the convention for a price chart, where the latest
     /// value sits beside its label rather than across the plot from it.
     pub fn y_axis_trailing(mut self) -> Self {
         self.y_axis.position = AxisPosition::Trailing;
@@ -265,7 +265,7 @@ impl Chart {
     /// [`guides`](Chart::guides) for it (README.md "Selection").
     ///
     /// Two-way, like a slider's value: the chart writes, the chart reads, and the app owns the
-    /// signal — so the same selection can drive a readout, a detail pane or anything else without
+    /// signal, so the same selection can drive a readout, a detail pane or anything else without
     /// the chart knowing. `None` means nothing is selected, which is what a pointer leaving the
     /// plot writes.
     ///
@@ -279,14 +279,14 @@ impl Chart {
     }
 
     /// How a point becomes a selection: the nearest x with every series' value there
-    /// ([`Snap::NearestX`](select::Snap::NearestX), the default — a line chart), or the single
-    /// nearest mark ([`Snap::NearestMark`](select::Snap::NearestMark) — a scatter).
+    /// ([`Snap::NearestX`](select::Snap::NearestX), the default, for a line chart), or the single
+    /// nearest mark ([`Snap::NearestMark`](select::Snap::NearestMark), for a scatter).
     pub fn snap(mut self, snap: select::Snap) -> Self {
         self.snap = snap;
         self
     }
 
-    /// What the chart draws for the current selection —
+    /// What the chart draws for the current selection:
     /// [`Guides::RULE`](select::Guides::RULE), [`Guides::CROSSHAIR`](select::Guides::CROSSHAIR),
     /// or a struct of your own. The default draws nothing, so `.select(sig)` alone reports without
     /// changing the picture.
@@ -302,7 +302,7 @@ impl Chart {
         self.plot_insets = Some(insets);
         self
     }
-    /// Drop the grid on both axes — the right call for a chart whose marks already partition the
+    /// Drop the grid on both axes, the right call for a chart whose marks already partition the
     /// plot, like a stacked-to-100% bar.
     pub fn no_grid(mut self) -> Self {
         self.x_axis.grid = false;
@@ -321,8 +321,8 @@ impl Chart {
         }
         self
     }
-    /// Name the x axis (`.chartXAxisLabel`). An axis with no name drawn is the default — a data
-    /// column's own label is NOT used as one, because under labels already reading `C1 C2 C3` a
+    /// Name the x axis (`.chartXAxisLabel`). An axis with no name drawn is the default; a data
+    /// column's label is not used as one, because under labels already reading `C1 C2 C3` a
     /// title saying "Category" is noise.
     pub fn x_label(mut self, t: impl Into<String>) -> Self {
         self.x_axis.title = Some(t.into());
@@ -341,7 +341,7 @@ impl Chart {
         self.y_axis.desired_count = n;
         self
     }
-    /// Render each x tick's value yourself — currency, percentages, a custom date format.
+    /// Render each x tick's value yourself: currency, percentages, a custom date format.
     pub fn x_format(mut self, f: impl Fn(&Datum) -> String + 'static) -> Self {
         self.x_axis.format = Some(Rc::new(f));
         self
@@ -363,7 +363,7 @@ impl Chart {
         self
     }
     /// Replace the series palette (`.chartForegroundStyleScale`). The closure gets the series
-    /// index and its name, so a chart can key colors off meaning — red for "Loss" — rather than
+    /// index and its name, so a chart can key colors off meaning (red for "Loss") rather than
     /// off position.
     pub fn series_colors(mut self, f: impl Fn(usize, &str) -> Color + 'static) -> Self {
         self.colors = Rc::new(f);
@@ -488,7 +488,7 @@ fn draw_legend(
 ) {
     let line = day_core::measure_text("0", label_size, font).height;
     let (swatch, gap) = (legend_swatch(line), legend_gap(label_size));
-    // Aligned to the PLOT rather than centered in the pane: a horizontal key starts where the
+    // Aligned to the plot rather than centered in the pane: a horizontal key starts where the
     // first bar does, which is where the eye already is after reading the axis, and a vertical
     // one hangs from the top of the plot instead of floating against its middle.
     let mut x = if lb.horizontal {
@@ -513,8 +513,8 @@ fn draw_legend(
                 size: label_size,
                 color,
                 // Centered on the same line the swatch is centered on. With a top anchor this sat
-                // half a line low, because the point given is the ROW's middle, not the text's
-                // top — the kind of off-by-a-half-line only the anchor can state away.
+                // half a line low, because the position given is the row's middle, not the text's
+                // top, the kind of off-by-a-half-line only the anchor can state away.
                 anchor: TextAnchor {
                     h: TextAlign::Leading,
                     v: TextVAlign::Middle,
@@ -567,14 +567,14 @@ impl Piece for Chart {
         } = self;
 
         // What the last draw positioned, for the pointer to hit (`select::HitModel`). Shared
-        // between the draw closure that fills it and the gesture handlers that read it — hit
-        // testing runs against what was DRAWN rather than re-resolving the whole pipeline on
+        // between the draw closure that fills it and the gesture handlers that read it, so hit
+        // testing runs against what was drawn rather than re-resolving the whole pipeline on
         // every pointer move.
         let hits: Rc<std::cell::RefCell<select::HitModel>> = Rc::default();
 
-        // A chart fills what it is given: the whole point of measuring the axis per draw is that
-        // the size is the container's to decide, so the leaf grows rather than asking for an
-        // intrinsic size the data cannot know.
+        // A chart fills what it is given: the axis is measured per draw so that the size is the
+        // container's to decide, and the leaf grows rather than asking for an intrinsic size the
+        // data cannot know.
         let hits_draw = hits.clone();
         day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
             if size.width <= 2.0 || size.height <= 2.0 {
@@ -658,7 +658,7 @@ impl Piece for Chart {
             if let Some(lb) = lb {
                 draw_legend(d, &series, &lb, resolved.plot, label_size, &font, ch.label);
             }
-            // Record the hit model AFTER drawing, from the same `resolved` the marks came from,
+            // Record the hit model after drawing, from the same `resolved` the marks came from,
             // so a pointer can only ever select something that is actually on screen.
             if select.is_some() {
                 *hits_draw.borrow_mut() = render::hit_model(&resolved, &paint);
@@ -677,7 +677,7 @@ impl Piece for Chart {
             let sig = select;
             move |at| {
                 if let Some(sig) = &sig {
-                    // Leaving clears it — which is why the handler takes an `Option` rather than
+                    // Leaving clears it, which is why the handler takes an `Option` rather than
                     // a phase to match on.
                     let next = at.and_then(|p| hits.borrow().resolve(p, snap));
                     if sig.get_untracked() != next {
@@ -702,7 +702,7 @@ impl Piece for Chart {
             let hits = hits.clone();
             let sig = select;
             // A finger scrubbing along the plot: every phase re-selects, so the label tracks the
-            // drag. Nothing is cleared at the end — a touch device has no pointer to leave with,
+            // drag. Nothing is cleared at the end: a touch device has no pointer to leave with,
             // so the last selection stands until the next press, which is what a reader wants.
             move |drag| {
                 if let Some(sig) = &sig {

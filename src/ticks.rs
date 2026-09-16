@@ -9,14 +9,14 @@
 //! Positioning Tick Labels on Axes*, InfoVis 2010): search candidate label sequences and score each
 //! on four competing criteria, rather than picking the first that fits.
 //!
-//! - **simplicity** — humans read steps of 1, 5, 2, 2.5, 4, 3 (in that order of preference), and an
+//! - **simplicity**: humans read steps of 1, 5, 2, 2.5, 4, 3 (in that order of preference), and an
 //!   axis that includes zero reads better than one that does not.
-//! - **coverage** — labels should span the data closely; an axis running to 100 for data that stops
+//! - **coverage**: labels should span the data closely; an axis running to 100 for data that stops
 //!   at 61 wastes half the plot.
-//! - **density** — the number of labels should land near the number asked for, penalized
+//! - **density**: the number of labels should land near the number asked for, penalized
 //!   symmetrically so twice as many is as bad as half as many.
-//! - **legibility** — the labels have to actually fit. The paper leaves this to the implementation;
-//!   here it is computed from MEASURED text (`day::measure_text`) against the axis's pixel length,
+//! - **legibility**: the labels have to fit. The paper leaves this to the implementation;
+//!   here it is computed from measured text (`day::measure_text`) against the axis's pixel length,
 //!   which is what makes the choice follow the window as it resizes rather than being fixed at
 //!   authoring time.
 //!
@@ -30,7 +30,7 @@
 
 use crate::data::Interval;
 
-/// One tick: where it sits in DATA space, and the text it shows.
+/// One tick: where it sits in data space, and the text it shows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tick {
     pub value: f64,
@@ -82,7 +82,7 @@ impl LabelFit<'_> {
         if needed <= self.axis_length {
             return 1.0;
         }
-        // Past the point where they fit, fall off with the overshoot rather than dropping to zero:
+        // Once they no longer fit, fall off with the overshoot rather than dropping to zero:
         // a set that is 10% too wide should still beat one that is twice too wide, so the search
         // degrades gracefully on an axis too short for any labelling.
         (self.axis_length / needed).clamp(0.0, 1.0)
@@ -145,8 +145,8 @@ pub struct Labelling {
 /// Extended Wilkinson: the best labelling of `domain` at roughly `target` labels.
 ///
 /// `fit` makes the answer depend on the axis's real length and the real width of the text, so the
-/// same domain labels itself differently in a narrow pane than in a wide one — which is the whole
-/// point of computing it per draw instead of once.
+/// same domain labels itself differently in a narrow pane than in a wide one, which is why it is
+/// computed per draw instead of once.
 pub fn extended(domain: Interval, target: usize, fit: &LabelFit<'_>) -> Labelling {
     let dmin = domain.lo;
     let dmax = domain.hi;
@@ -327,8 +327,8 @@ pub fn log_ticks(domain: Interval, base: f64, target: usize, fit: &LabelFit<'_>)
     }
     values.retain(|v| *v >= domain.lo * 0.999 && *v <= domain.hi * 1.001);
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    // Thin uniformly when even the decades are too many to label — but "too many" is what the
-    // axis has ROOM for, measured, not a fixed count. A tall axis shows all seven decades of a
+    // Thin uniformly when even the decades are too many to label, but "too many" is what the
+    // axis has room for, measured, not a fixed count. A tall axis shows all seven decades of a
     // million-fold range; a short one drops to every other. Judging by `target` alone dropped
     // labels an axis had space for, which is the one thing this module exists not to do.
     let room = fit
@@ -356,7 +356,7 @@ pub fn log_ticks(domain: Interval, base: f64, target: usize, fit: &LabelFit<'_>)
 /// and is exact for the whole range an `f64` of seconds can express.
 ///
 /// A time axis needs this rather than arithmetic on seconds because months and years are not fixed
-/// numbers of seconds — a "monthly" tick that advanced by 2 592 000 s would drift off the first of
+/// numbers of seconds: a "monthly" tick that advanced by 2 592 000 s would drift off the first of
 /// the month within a year and label February 29th as March 1st in leap years.
 pub mod civil {
     /// `(year, month, day)` from a day count since 1970-01-01.
@@ -392,7 +392,7 @@ const DAY: f64 = 86_400.0;
 /// A calendar step a time axis may advance by.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum TimeStep {
-    /// A fixed number of seconds — everything up to a week, where the length never varies.
+    /// A fixed number of seconds: everything up to a week, where the length never varies.
     Fixed(f64),
     Month(i32),
     Year(i32),
@@ -454,7 +454,7 @@ pub fn time_ticks(domain: Interval, target: usize) -> Labelling {
     let values = walk(domain, chosen);
     Labelling {
         values,
-        // A time labelling's precision comes from the step's KIND, not a decimal count; `step`
+        // A time labelling's precision comes from the step's kind, not a decimal count; `step`
         // stays 0 and `time_label` reads the kind instead.
         step: 0.0,
     }

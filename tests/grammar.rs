@@ -16,7 +16,7 @@ use day_piece_charts::ticks::{self, LabelFit, civil};
 use day_piece_charts::*;
 
 fn fit(len: f64) -> LabelFit<'static> {
-    // A generous per-character estimate, so these tests exercise the SEARCH rather than the
+    // A generous per-character estimate, so these tests exercise the search rather than the
     // legibility cutoff.
     LabelFit {
         axis_length: len,
@@ -29,7 +29,7 @@ fn fit(len: f64) -> LabelFit<'static> {
 fn extended_wilkinson_prefers_round_steps_and_covers_the_data() {
     let l = ticks::extended(Interval::new(0.0, 61.0), 5, &fit(400.0));
     assert!(l.values.len() >= 3, "too few labels: {:?}", l.values);
-    // The step has to be one of the preferred multipliers times a power of ten — that is the
+    // The step has to be one of the preferred multipliers times a power of ten; that is the
     // simplicity criterion, and it is what stops an axis labelled 0, 12.2, 24.4.
     let mantissa = l.step / 10f64.powf(l.step.log10().floor());
     assert!(
@@ -237,7 +237,7 @@ fn an_inferred_domain_is_widened_to_the_ticks_that_enclose_it() {
 #[test]
 fn the_axis_top_never_falls_as_the_data_grows() {
     // Sweep a bar's height through a wide range and read back the top gridline. The axis may jump
-    // outward as the data grows; it must never jump back DOWN, because a reader watching a live
+    // outward as the data grows; it must never jump back down, because a reader watching a live
     // chart sees the bars shrink when nothing shrank.
     let top_for = |v: f64| {
         y_ticks(vec![bar(value("q", "C1"), value("v", v))])
@@ -290,7 +290,7 @@ fn a_log_axis_labels_every_tick_the_same_way() {
 #[test]
 fn the_reported_bar_axis_jump_stays_fixed() {
     // The three settings from the report, as stacked totals: 149 gave an axis to 150, 152 to 200,
-    // and 158 dropped BACK to 160 because the tick step had moved from 50 to 40 underneath it.
+    // and 158 dropped back to 160 because the tick step had moved from 50 to 40 underneath it.
     let top_for = |v: f64| {
         y_ticks(vec![bar(value("q", "C1"), value("v", v))])
             .last()
@@ -327,7 +327,7 @@ fn a_negative_axis_grows_downward_without_rising() {
 
 #[test]
 fn only_the_two_ends_of_a_stack_round_their_corners() {
-    // Rounding every segment turns a stack's middles into lozenges and opens seams between the
+    // Rounding every segment turns a stack's middles into lozenges and opens gaps between the
     // colors; only the segments at the two ends carry the radius (README "What it does
     // carefully"). Three series in one column: bottom, middle, top.
     let marks = vec![
@@ -343,7 +343,7 @@ fn only_the_two_ends_of_a_stack_round_their_corners() {
 
 #[test]
 fn anything_that_did_not_stack_keeps_both_ends() {
-    // An unstacked bar is its own two ends, and so is every cell of a heat map — which shares this
+    // An unstacked bar is its own two ends, and so is every cell of a heat map, which shares this
     // code path and would lose its corners entirely if the grouping caught it.
     let marks = vec![
         bar(value("q", "Q1"), value("v", 30.0)).by_series(value("s", "A")),
@@ -433,7 +433,7 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
 }
 
-/// The y ticks of a LOG chart pinned to `0.5..=top`, the shape the Scales page draws.
+/// The y ticks of a log chart pinned to `0.5..=top`, the shape the Scales page draws.
 fn log_y_ticks(marks: Vec<Mark>, top: f64) -> Vec<day_piece_charts::ticks::Tick> {
     let x = ScaleSpec::default();
     let y = ScaleSpec {
@@ -530,7 +530,7 @@ fn polar_projection_is_circular_and_starts_at_twelve_oclock() {
 
 #[test]
 fn sectors_stack_by_default_so_a_pie_sweeps_a_whole_turn() {
-    // Unstacked, every wedge would start at twelve o'clock and lie on top of the last one — which
+    // Unstacked, every wedge would start at twelve o'clock and lie on top of the last one, which
     // is what a pie looked like before sectors joined the stacking default.
     let marks = vec![
         sector(value("Share", 30.0)).by_series(value("Channel", "A")),
@@ -603,7 +603,7 @@ fn an_iso_date_is_the_start_of_its_day_and_garbage_is_dropped() {
 
 #[test]
 fn a_categorical_y_becomes_a_band_of_rows() {
-    // A heat map: one cell per (month, region), the region a CATEGORY on y. The y scale has to be
+    // A heat map: one cell per (month, region), the region a category on y. The y scale has to be
     // a band of the two rows, in first-seen order, with no phantom numeric row from the stacked
     // bounds a rect does not have.
     let marks = vec![
@@ -623,7 +623,7 @@ fn a_categorical_y_becomes_a_band_of_rows() {
     );
     assert_eq!(r.y_ticks.len(), 2, "one label per row: {:?}", r.y_ticks);
     assert!(r.y.band_width() > 0.0);
-    // And the first row is at the TOP, the way a table reads.
+    // And the first row is at the top, the way a table reads.
     let north = r.y.project(&Datum::Category("North".into())).unwrap();
     let south = r.y.project(&Datum::Category("South".into())).unwrap();
     assert!(

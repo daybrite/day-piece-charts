@@ -4,10 +4,10 @@
 #     day launch -p ios-uikit --script dayscript/charts.yaml
 #     day launch -p android-mdc --script dayscript/charts.yaml
 #
-# A chart is drawn on the canvas, so nothing here reads the plot itself — the screenshots are what
+# A chart is drawn on the canvas, so nothing here reads the plot itself; the screenshots are what
 # show it. What the assertions read is the arithmetic the chart runs before it draws: the domain
 # `resolve::domain_of` infers and the labelling the extended-Wilkinson search picks, answered
-# INSIDE the device build. tests/grammar.rs asserts the same search on the host.
+# Inside the device build. tests/grammar.rs asserts the same search on the host.
 name: charts
 description: Switch between the four compositions, change how much data is plotted, and read back what the pipeline derives.
 flow:
@@ -15,7 +15,7 @@ flow:
   - assert_visible: { id: charts-plot }
 
   # Six months of two regions, as grouped bars: 12 marks, values from 8 to 28, and the tick
-  # search settles on 10/15/20/25/30 — five labels a step of five apart.
+  # search settles on 10/15/20/25/30: five labels a step of five apart.
   - assert_text: { id: charts-grammar, text: "bar, dodged by Region" }
   - assert_text: { id: charts-marks, text: "12" }
   - assert_text: { id: charts-series, text: "North, South" }
@@ -44,7 +44,7 @@ flow:
   - assert_text: { id: charts-marks, text: "2" }
   - screenshot: charts-donut
 
-  # The heat map: the same marks as a grid, with the REGION on y. Both axes are bands, so the
+  # The heat map: the same marks as a grid, with `Region` on y. Both axes are bands, so the
   # mark count is the grid's cell count and the drawing is what the screenshot carries.
   - select: { id: charts-composition-picker, index: 4 }
   - assert_text: { id: charts-grammar, text: "rect, colored by Revenue" }

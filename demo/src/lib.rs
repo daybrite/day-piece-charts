@@ -1,7 +1,7 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 
-//! Charts Demo — the demo and on-device test app for `day-piece-charts`.
+//! Charts Demo: the demo and on-device test app for `day-piece-charts`.
 //!
 //! One page: a picker of chart compositions, the chart itself, a readout of what the pipeline
 //! derives from the data, and a slider that changes how much data there is. Every element carries
@@ -9,8 +9,8 @@
 //! Android emulator.
 //!
 //! A chart is drawn on the canvas, so a walkthrough cannot read it the way it reads a label. What
-//! it can read is the arithmetic the chart runs before it draws — the inferred domain and the tick
-//! labelling — and that is what the readout below shows, from the same public functions the chart
+//! it can read is the arithmetic the chart runs before it draws (the inferred domain and the tick
+//! labelling), and that is what the readout below shows, from the same public functions the chart
 //! itself calls. `tests/grammar.rs` in the crate asserts the same numbers on the host.
 
 use day::prelude::*;
@@ -32,7 +32,7 @@ const MONTHS: [&str; 12] = [
 ];
 
 /// Monthly revenue per region, in thousands. Fixed data, because the walkthrough asserts the
-/// numbers the pipeline derives from it — a change here is a change to `dayscript/charts.yaml`.
+/// numbers the pipeline derives from it; a change here is a change to `dayscript/charts.yaml`.
 const SERIES: [(&str, [f64; 12]); 2] = [
     (
         "North",
@@ -52,7 +52,7 @@ const SERIES: [(&str, [f64; 12]); 2] = [
 const DEFAULT_MONTHS: f64 = 6.0;
 
 /// The four compositions the picker offers. Each is a different assembly of the same grammar, not
-/// a different chart type — which is the point the crate makes, so the demo shows it as a choice.
+/// a different chart type, which is the crate's claim, so the demo shows it as a choice.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Composition {
     /// Bars dodged side by side within each month's band.
@@ -127,7 +127,7 @@ pub fn root() -> impl Piece {
             .id("charts-composition-picker"),
         ),
         // A donut needs polar coordinates, and the coordinate system is a property of the chart
-        // rather than of its marks — so it lives in its own subtree and `when` swaps to it. The
+        // rather than of its marks, so it lives in its own subtree and `when` swaps to it. The
         // heat map is Cartesian but titles its y axis by the row column rather than by revenue,
         // so it is a third subtree; the rest share one chart and differ only in the marks.
         column((when(
@@ -172,7 +172,7 @@ fn cartesian(picked: Signal<usize>, months: Signal<f64>) -> impl Piece {
 
 /// The same two regions as a donut: one sector per region, summed over the months in view.
 ///
-/// Sectors stack by default, so this is a stacked bar the coordinate system bends into a ring —
+/// Sectors stack by default, so this is a stacked bar the coordinate system bends into a ring;
 /// there is no pie-specific code here or in the crate.
 fn donut(months: Signal<f64>) -> impl Piece {
     chart(move || {
@@ -194,7 +194,7 @@ fn donut(months: Signal<f64>) -> impl Piece {
 }
 
 /// The same numbers as a grid: months across, regions down, revenue as the cell's color on the
-/// sequential ramp — the composition where BOTH axes are bands, which is what a rect mark with
+/// sequential ramp: the composition where both axes are bands, which is what a rect mark with
 /// a categorical y asks for. Every cell also prints its value, in white on the dark end of the
 /// ramp and in the label color on the light end, because no one color reads on both.
 fn heat_map(months: Signal<f64>) -> impl Piece {
@@ -233,7 +233,7 @@ fn marks(comp: Composition, n: usize) -> Vec<Mark> {
             let series = value("Region", *region);
             out.push(match comp {
                 // Dodging is a position adjustment: the same bars, offset within the band
-                // instead of stacked on each other. Both halves are needed — bars stack by
+                // instead of stacked on each other. Both halves are needed: bars stack by
                 // default, and binding the dodge channel does not by itself turn that off, so
                 // without the `Unstacked` this draws the stacked composition below.
                 Composition::Grouped => bar(x, y)
@@ -242,7 +242,7 @@ fn marks(comp: Composition, n: usize) -> Vec<Mark> {
                     .stacking(Stacking::Unstacked),
                 Composition::Stacked => bar(x, y).by_series(series).stacking(Stacking::Standard),
                 // `line` is qualified because `day::prelude` exports a `line` shape of its own.
-                // Monotone interpolation is the honest curve for revenue: it cannot dip below a
+                // Monotone interpolation is the right curve for revenue: it cannot dip below a
                 // value the data never took.
                 Composition::Line | Composition::Donut | Composition::HeatMap => {
                     { day_piece_charts::line(x, y) }
@@ -324,7 +324,7 @@ fn total(values: &[f64; 12], n: usize) -> f64 {
     values.iter().take(n).sum()
 }
 
-/// The interval the plotted values span — `resolve::domain_of`, the function the chart calls on
+/// The interval the plotted values span: `resolve::domain_of`, the function the chart calls on
 /// its own way to a scale.
 ///
 /// The drawn axis is usually wider than this: a bar or an area includes its baseline, and a stack

@@ -3,16 +3,16 @@
 
 //! Marks: the geometric objects a chart is made of, and the channels data is encoded into.
 //!
-//! This is the grammar's noun. A mark is a *kind* (bar, line, sector, …) plus a set of **encodings**
-//! — data columns bound to visual channels: position (x, y), color (`by_series`), symbol, and the
-//! dodging channel (`by_position`). Nothing here knows about pixels or scales; a mark is a
-//! description, and [`crate::render`] is the only place it becomes geometry.
+//! This is the grammar's noun. A mark is a *kind* (bar, line, sector, …) plus a set of
+//! **encodings**, data columns bound to visual channels: position (x, y), color (`by_series`),
+//! symbol, and the dodging channel (`by_position`). Nothing here knows about pixels or scales; a
+//! mark is a description, and [`crate::render`] is the only place it becomes geometry.
 //!
 //! The surface mirrors Swift Charts' 2D marks so that a chart written against one reads the same
 //! against the other, with two adjustments for Rust and for Day's API style (docs/api-style.md):
 //! constructors stay at two positional, conventionally-ordered arguments (`x` then `y`, the same
 //! exemption `Size::new(w, h)` takes), and everything Swift expresses as a labelled initializer
-//! variant — `BarMark(x:yStart:yEnd:)` — is a builder method here (`.y_range(start, end)`).
+//! variant (`BarMark(x:yStart:yEnd:)`) is a builder method here (`.y_range(start, end)`).
 
 use day_spec::{Color, LineCap, LineJoin};
 
@@ -29,7 +29,7 @@ pub enum MarkKind {
     Area,
     /// One symbol per datum.
     Point,
-    /// An explicit rectangle — the mark heat maps are built from.
+    /// An explicit rectangle, the mark heat maps are built from.
     Rectangle,
     /// An infinite line at a value, or a segment between two: thresholds, medians, spans.
     Rule,
@@ -39,8 +39,8 @@ pub enum MarkKind {
 
 /// How successive points are joined.
 ///
-/// The monotone and Catmull-Rom cases are genuinely different curves, not styling: a monotone
-/// spline is constrained never to overshoot the data, which is what makes it the honest choice for
+/// The monotone and Catmull-Rom cases are different curves, not styling: a monotone
+/// spline is constrained never to overshoot the data, which is what makes it the right choice for
 /// a series that must not appear to dip below a value it never took.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Interpolation {
@@ -84,7 +84,7 @@ pub enum Symbol {
 
 impl Symbol {
     /// The cycle a symbol scale assigns from, in an order that keeps neighbours distinguishable at
-    /// small sizes — a filled round, a filled corner, a filled point, then the open marks.
+    /// small sizes: a filled round, a filled corner, a filled point, then the open marks.
     pub const CYCLE: [Symbol; 8] = [
         Symbol::Circle,
         Symbol::Square,
@@ -103,7 +103,7 @@ impl Symbol {
     }
 }
 
-/// How a mark's extent across its band is decided — Swift Charts' `MarkDimension`.
+/// How a mark's extent across its band is decided: Swift Charts' `MarkDimension`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Dimension {
     /// The scale's own band width, less its padding.
@@ -128,7 +128,7 @@ impl Dimension {
     }
 }
 
-/// How marks sharing an x position combine — the grammar's *position adjustment*.
+/// How marks sharing an x position combine: the grammar's *position adjustment*.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Stacking {
     /// Sum upward from the baseline.
@@ -136,7 +136,7 @@ pub enum Stacking {
     Standard,
     /// Sum, then scale each column to fill the axis: a part-to-whole chart.
     Normalized,
-    /// Sum, then centre the stack on the baseline — a streamgraph.
+    /// Sum, then center the stack on the baseline: a streamgraph.
     Center,
     /// Do not combine; marks overlap where they coincide.
     Unstacked,
@@ -185,7 +185,7 @@ pub struct MarkStyle {
     pub line_join: LineJoin,
     pub interpolation: Interpolation,
     pub symbol: Option<Symbol>,
-    /// Symbol AREA in square points, matching Swift Charts' `symbolSize` — area rather than
+    /// Symbol area in square points, matching Swift Charts' `symbolSize`: area rather than
     /// diameter so that a value twice as large reads as twice as much ink, which is the whole
     /// reason area is the right channel for magnitude.
     pub symbol_size: f64,
@@ -217,12 +217,12 @@ pub struct Mark {
     pub x_end: Option<Value>,
     pub y: Option<Value>,
     pub y_end: Option<Value>,
-    /// The color channel — Swift Charts' `.foregroundStyle(by:)`. Also what the legend lists.
+    /// The color channel, Swift Charts' `.foregroundStyle(by:)`. Also what the legend lists.
     pub series: Option<Value>,
-    /// The dodging channel — Swift Charts' `.position(by:)`. Splits a band between its values so
+    /// The dodging channel, Swift Charts' `.position(by:)`. Splits a band between its values so
     /// grouped bars sit side by side instead of on top of one another.
     pub dodge: Option<Value>,
-    /// The symbol channel — `.symbol(by:)`.
+    /// The symbol channel, `.symbol(by:)`.
     pub symbol_by: Option<Value>,
     pub style: MarkStyle,
     pub width: Dimension,
@@ -256,7 +256,7 @@ impl Mark {
             style: MarkStyle::default(),
             width: Dimension::Automatic,
             height: Dimension::Automatic,
-            // Bars, areas and SECTORS stack by default; points and lines do not — the same
+            // Bars, areas and sectors stack by default; points and lines do not. These are the same
             // defaults Swift Charts picks, and for the same reason: stacking is meaningful only
             // where the marks partition a quantity. A sector belongs in that list because a pie is
             // a stack: unstacked, every wedge would start at twelve o'clock and overlap the last.
@@ -281,7 +281,7 @@ impl Mark {
         self.series = Some(v);
         self
     }
-    /// Bind the dodging channel — grouped (side-by-side) bars.
+    /// Bind the dodging channel: grouped (side-by-side) bars.
     pub fn by_position(mut self, v: Value) -> Self {
         self.dodge = Some(v);
         self
@@ -292,7 +292,7 @@ impl Mark {
         self
     }
 
-    /// Span the x axis from `start` to `end` — `BarMark(xStart:xEnd:)`, `RuleMark(xStart:xEnd:)`.
+    /// Span the x axis from `start` to `end`: `BarMark(xStart:xEnd:)`, `RuleMark(xStart:xEnd:)`.
     pub fn x_range(mut self, start: Value, end: Value) -> Self {
         self.x = Some(start);
         self.x_end = Some(end);
@@ -328,7 +328,7 @@ impl Mark {
         self
     }
     /// Fill an area or bar with a vertical gradient, `top` at the mark's top edge and `bottom` at
-    /// its baseline — the fade under a price line. The series color still names the mark in the
+    /// its baseline: the fade under a price line. The series color still names the mark in the
     /// legend; only the fill changes.
     pub fn gradient(mut self, top: Color, bottom: Color) -> Self {
         self.style.gradient = Some((top, bottom));
@@ -357,7 +357,7 @@ impl Mark {
         self.style.symbol = Some(s);
         self
     }
-    /// Symbol AREA in square points (Swift Charts' `symbolSize`).
+    /// Symbol area in square points (Swift Charts' `symbolSize`).
     pub fn symbol_size(mut self, area: f64) -> Self {
         self.style.symbol_size = area;
         self
@@ -420,7 +420,7 @@ impl Mark {
         self.inner_radius = fraction.clamp(0.0, 0.99);
         self
     }
-    /// Outer radius as a fraction of the plot's available radius — a wedge that reaches less far
+    /// Outer radius as a fraction of the plot's available radius: a wedge that reaches less far
     /// than its neighbours, which is how a rose chart encodes magnitude radially.
     pub fn outer_radius(mut self, fraction: f64) -> Self {
         self.outer_radius = fraction.clamp(0.0, 1.0);
@@ -473,7 +473,7 @@ pub fn point(x: Value, y: Value) -> Mark {
     m
 }
 
-/// `RectangleMark(x:y:)` — one cell of a heat map. Give it ranges with [`Mark::x_range`] /
+/// `RectangleMark(x:y:)`: one cell of a heat map. Give it ranges with [`Mark::x_range`] /
 /// [`Mark::y_range`] for an explicit rectangle.
 pub fn rect(x: Value, y: Value) -> Mark {
     let mut m = Mark::new(MarkKind::Rectangle);
@@ -482,21 +482,21 @@ pub fn rect(x: Value, y: Value) -> Mark {
     m
 }
 
-/// `RuleMark(x:)` — a vertical rule spanning the plot.
+/// `RuleMark(x:)`: a vertical rule spanning the plot.
 pub fn rule_x(x: Value) -> Mark {
     let mut m = Mark::new(MarkKind::Rule);
     m.x = Some(x);
     m
 }
 
-/// `RuleMark(y:)` — a horizontal rule spanning the plot.
+/// `RuleMark(y:)`: a horizontal rule spanning the plot.
 pub fn rule_y(y: Value) -> Mark {
     let mut m = Mark::new(MarkKind::Rule);
     m.y = Some(y);
     m
 }
 
-/// `SectorMark(angle:)` — a wedge whose angle is proportional to its value. The mark that makes a
+/// `SectorMark(angle:)`: a wedge whose angle is proportional to its value. The mark that makes a
 /// chart polar; see [`crate::coord::Coordinate`].
 pub fn sector(angle: Value) -> Mark {
     let mut m = Mark::new(MarkKind::Sector);

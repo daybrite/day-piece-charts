@@ -1,7 +1,7 @@
 //! Selection: turning a point on the chart back into data, and drawing guides for it.
 //!
-//! The chart WRITES what is under the pointer into an app-owned signal and READS the same signal
-//! to draw its guides. Two-way, like a slider's value — which is what makes the whole behaviour
+//! The chart writes what is under the pointer into an app-owned signal and reads the same signal
+//! to draw its guides. Two-way, like a slider's value, which is what makes the whole behaviour
 //! `.select(sig).snap(..).guides(..)` and leaves the app free to show the same selection its own
 //! way (a readout beside the chart, a detail pane) by reading the signal it already owns.
 //!
@@ -19,7 +19,7 @@ pub struct SelectedValue {
     /// The series name, empty for a chart with no color channel.
     pub series: String,
     pub color: Color,
-    /// The value, formatted by the chart's own `y_format` — so it is already localized if the
+    /// The value, formatted by the chart's `y_format`, so it is already localized if the
     /// app's formatter localizes, and identical to what the axis shows.
     pub label: String,
     /// The mark's own position in canvas points, for a highlight ring.
@@ -43,11 +43,11 @@ pub struct Selection {
 /// How a point becomes a selection.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Snap {
-    /// The nearest position along x, with EVERY series' value there — what a line chart wants: a
+    /// The nearest position along x, with every series' value there, what a line chart wants: a
     /// scrub along the axis reading all the series at once.
     #[default]
     NearestX,
-    /// The single nearest mark in both axes — what a scatter wants, where two points sharing an x
+    /// The single nearest mark in both axes, what a scatter wants, where two points sharing an x
     /// are unrelated.
     NearestMark,
 }
@@ -69,7 +69,7 @@ pub struct Guides {
 }
 
 impl Guides {
-    /// Nothing — the default, so `.select(sig)` alone reports without drawing.
+    /// Nothing: the default, so `.select(sig)` alone reports without drawing.
     pub const NONE: Guides = Guides {
         vertical: false,
         horizontal: false,
@@ -95,9 +95,9 @@ impl Guides {
 
 /// One candidate mark, recorded during the draw that positioned it.
 ///
-/// Hit testing runs against what was DRAWN, not against a re-resolve: the draw already projected
-/// every mark, and re-deriving it on each pointer move would repeat the whole pipeline — the tick
-/// search included — for every mouse motion.
+/// Hit testing runs against what was drawn, not against a re-resolve: the draw already projected
+/// every mark, and re-deriving it on each pointer move would repeat the whole pipeline (the tick
+/// search included) for every mouse motion.
 #[derive(Clone, Debug)]
 pub struct HitMark {
     pub at: Point,
@@ -116,7 +116,7 @@ pub struct HitModel {
 }
 
 impl HitModel {
-    /// The selection at `p`, or `None` if the point is outside the plot or nothing is near enough.
+    /// The selection at `p`, or `None` if `p` is outside the plot or nothing is near enough.
     pub fn resolve(&self, p: Point, snap: Snap) -> Option<Selection> {
         if self.marks.is_empty() || !contains(self.plot, p) {
             return None;
@@ -138,7 +138,7 @@ impl HitModel {
                 })
             }
             Snap::NearestX => {
-                // The nearest x with anything on it, then every mark sharing that x — so scrubbing
+                // The nearest x with anything on it, then every mark sharing that x, so scrubbing
                 // a multi-series line chart reads all the series at one position, which is what
                 // makes the label box worth having.
                 let target = self
@@ -152,9 +152,9 @@ impl HitModel {
                     })?
                     .at
                     .x;
-                // One value per SERIES, the one nearest the selected position. Two samples of a
-                // series can land within a pixel of each other on a dense time axis — a year of
-                // daily closes in a few hundred points — and listing both says the same series
+                // One value per series, the one nearest the selected position. Two samples of a
+                // series can land within a pixel of each other on a dense time axis (a year of
+                // daily closes in a few hundred points), and listing both says the same series
                 // has two values at one date, which is not a thing.
                 let mut values: Vec<SelectedValue> = Vec::new();
                 for m in self.marks.iter().filter(|m| (m.at.x - target).abs() < 1.0) {

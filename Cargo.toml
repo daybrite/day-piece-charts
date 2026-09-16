@@ -10,15 +10,15 @@ license = "MPL-2.0"
 # from git, exactly as they depend on day.
 publish = false
 
-# An EXTERNAL Day Piece (https://daybrite.dev/docs/extending) with NO native half. Every chart is
+# An external Day Piece (https://daybrite.dev/docs/extending) with no native half. Every chart is
 # recorded as a `Draw` display list and replayed by whatever backend the app runs on, so this crate
 # carries no per-toolkit code, no `[features]` for backends, and no `[package.metadata.day.piece]`
-# `backends` entry — the same shape day-piece-colorpicker's composed idiom has inside day. One
-# consequence worth stating: a chart looks identical on all nine targets, because it IS identical.
+# `backends` entry, the same shape day-piece-colorpicker's composed idiom has inside day. One
+# consequence worth stating: a chart looks identical on all nine targets, because it is identical.
 #
-# Every day dependency names the BARE canonical URL — no branch, tag, or rev. Cargo unifies a git
-# dependency only when URL and ref match, so an app on `git = "…/day.git"` and a piece pinned to a
-# tag would carry two copies of every day crate; leaving the ref off lets the app's Cargo.lock
+# Every day dependency names the bare canonical URL, with no branch, tag, or rev. Cargo unifies a
+# git dependency only when URL and ref match, so an app on `git = "…/day.git"` and a piece pinned
+# to a tag would carry two copies of every day crate; leaving the ref off lets the app's Cargo.lock
 # choose one revision for the whole graph.
 
 [package.metadata.day]
@@ -32,7 +32,7 @@ day-pieces = { git = "https://github.com/daybrite/day.git" }
 day-reactive = { git = "https://github.com/daybrite/day.git" }
 day-geometry = { git = "https://github.com/daybrite/day.git" }
 # Axis labels are numbers, and a number is locale-dependent: grouping separators, the decimal
-# mark, and the grouping RULE itself (en-IN groups by lakh). day-l10n already carries the icu4x
+# mark, and the grouping rule itself (en-IN groups by lakh). day-l10n already carries the icu4x
 # formatter every Day app links, so this edge adds a call, not a dependency.
 day-l10n = { git = "https://github.com/daybrite/day.git" }
 

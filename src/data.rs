@@ -7,7 +7,7 @@
 //! Swift Charts spells this `.value("Label", x)` and lets the type of `x` pick the scale. The same
 //! idea here is one enum with three inhabitants, because those are the three that behave
 //! differently under a scale: a number interpolates, a date interpolates but labels itself by
-//! calendar, and a category does neither — it is a set with an order, which is what a BAND scale
+//! calendar, and a category does neither: it is a set with an order, which is what a band scale
 //! needs (docs/charts.md "Scales").
 
 use std::fmt;
@@ -26,7 +26,7 @@ pub enum Datum {
 
 impl Datum {
     /// The continuous position, for a scale that interpolates. `None` for a category, which has
-    /// no position of its own — its scale assigns one from its index in the domain.
+    /// no position of its own; its scale assigns one from its index in the domain.
     pub fn as_continuous(&self) -> Option<f64> {
         match self {
             Datum::Number(v) | Datum::Time(v) => Some(*v),
@@ -93,7 +93,7 @@ impl IntoDatum for Datum {
     }
 }
 
-/// A plottable value and the name of the field it came from — Swift Charts' `.value(_:_:)`.
+/// A plottable value and the name of the field it came from: Swift Charts' `.value(_:_:)`.
 ///
 /// The label is not decoration: it is what an axis titles itself with and what a legend groups by
 /// when the app names no title of its own, which is why it travels with the value rather than
@@ -104,7 +104,7 @@ pub struct Value {
     pub datum: Datum,
 }
 
-/// `value("Revenue", 42.0)` — a labelled plottable value.
+/// `value("Revenue", 42.0)`: a labelled plottable value.
 pub fn value(label: impl Into<String>, datum: impl IntoDatum) -> Value {
     Value {
         label: label.into(),
@@ -112,7 +112,7 @@ pub fn value(label: impl Into<String>, datum: impl IntoDatum) -> Value {
     }
 }
 
-/// `time("Date", secs)` — a labelled instant, seconds since the Unix epoch.
+/// `time("Date", secs)`: a labelled instant, seconds since the Unix epoch.
 ///
 /// Separate from [`value`] because a bare `f64` cannot say whether it means a quantity or an
 /// instant, and the two label themselves completely differently.
@@ -123,11 +123,11 @@ pub fn time(label: impl Into<String>, epoch_seconds: f64) -> Value {
     }
 }
 
-/// `date("Date", "2026-07-01")` — a labelled calendar day from an ISO `YYYY-MM-DD` string, as the
+/// `date("Date", "2026-07-01")`: a labelled calendar day from an ISO `YYYY-MM-DD` string, as the
 /// instant that day begins.
 ///
-/// The everyday source of a time axis is a column of date strings — an exchange's daily bars, a
-/// CSV export — and every app holding one would otherwise write the same calendar arithmetic on
+/// The everyday source of a time axis is a column of date strings (an exchange's daily bars, a
+/// CSV export), and every app holding one would otherwise write the same calendar arithmetic on
 /// the way in. A string that does not parse becomes a non-finite instant, which the pipeline drops
 /// the way it drops a NaN (see [`Datum::is_finite`]) rather than plotting it at the epoch.
 pub fn date(label: impl Into<String>, iso: &str) -> Value {
@@ -189,7 +189,7 @@ impl Interval {
         }
     }
 
-    /// A domain with no width cannot be projected — every value would land on the same pixel and
+    /// A domain with no width cannot be projected: every value would land on the same pixel and
     /// the scale would divide by zero. Widen it symmetrically instead, by a unit related to the
     /// value itself so the padding is sensible at any magnitude.
     pub fn nondegenerate(self) -> Interval {

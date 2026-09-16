@@ -10,8 +10,8 @@
 //! against a prettier one: a chart whose series are told apart by hue has to work for the ~8% of
 //! men who would otherwise read two of them as the same series.
 //!
-//! The sequential ramp is **Viridis**, sampled at eight stops. Viridis is perceptually uniform —
-//! equal steps in the data are equal perceived steps in color — and monotone in lightness, so it
+//! The sequential ramp is **Viridis**, sampled at eight stops. Viridis is perceptually uniform
+//! (equal steps in the data are equal perceived steps in color) and monotone in lightness, so it
 //! survives being printed in grayscale. A rainbow ramp does neither, which is why it misleads.
 
 use day_spec::Color;
@@ -38,9 +38,9 @@ pub fn categorical(i: usize) -> Color {
 
 /// Viridis, sampled at eight stops and interpolated in sRGB.
 ///
-/// Interpolating a perceptual ramp in sRGB is a compromise — the honest space is CAM02-UCS, which
-/// is where the ramp was designed — but with stops this close the error is below a just-noticeable
-/// difference, and it keeps this crate free of a color-science dependency.
+/// Interpolating a perceptual ramp in sRGB is a compromise: the ramp was designed in CAM02-UCS.
+/// But with stops this close the error is below a just-noticeable difference, and it keeps this
+/// crate free of a color-science dependency.
 pub fn sequential(t: f64) -> Color {
     const P: [(u8, u8, u8); 8] = [
         (68, 1, 84),
@@ -95,8 +95,8 @@ pub struct Chrome {
 }
 
 impl Chrome {
-    /// The chrome for a ground of the given darkness. Grid lines are deliberately faint: a grid is
-    /// a reading aid, and one that competes with the data for contrast is worse than none.
+    /// The chrome for a ground of the given darkness. Grid lines are faint: a grid is a reading
+    /// aid, and one that competes with the data for contrast is worse than none.
     ///
     /// Labels and titles share one weight, at the platform's secondary-text alpha. Swift Charts
     /// draws every piece of chart text at a single grey, measured at 154/255 on a dark ground;

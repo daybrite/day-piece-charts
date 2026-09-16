@@ -3,7 +3,7 @@
 
 //! Scales: the map from data space to plot space, and back.
 //!
-//! In the grammar of graphics a scale is one of the few genuinely separate concerns — it knows
+//! In the grammar of graphics a scale is one of the few separate concerns: it knows
 //! nothing about marks and marks know nothing about pixels. Everything a chart draws goes through
 //! one, which is what lets the same mark render on a linear axis, a log axis, or a band of
 //! categories without knowing which.
@@ -14,7 +14,7 @@
 //!   [`Time`](ScaleKind::Time)) maps an interval onto an interval. It is invertible, which is what
 //!   a hit test needs.
 //! - **Discrete** ([`ScaleKind::Band`], [`Point`](ScaleKind::Point)) maps a finite ordered set onto
-//!   evenly spaced positions. A band has WIDTH — it is what a bar is drawn across — and a point
+//!   evenly spaced positions. A band has width (it is what a bar is drawn across) and a point
 //!   does not; that is the whole difference, and it is why a bar chart and a line chart of the same
 //!   categorical column want different scales.
 //!
@@ -83,7 +83,7 @@ pub struct Scale {
     /// The ordered categories, for a discrete kind.
     pub categories: Vec<String>,
     /// The output extent in plot points. `lo > hi` is legal and is how a y axis points up: the
-    /// range is simply reversed.
+    /// range is reversed.
     pub range: (f64, f64),
     pub padding: BandPadding,
     /// Whether the domain was given by the app rather than inferred, which is what decides if
@@ -116,7 +116,7 @@ impl Scale {
 
     /// The normalized position of a continuous value in `0..=1` before the range is applied.
     ///
-    /// Kept separate from [`Scale::project`] because the normalization is where the scale's KIND
+    /// Kept separate from [`Scale::project`] because the normalization is where the scale's kind
     /// lives; everything after it is the same affine step for every continuous kind.
     fn normalize(&self, v: f64) -> f64 {
         let Interval { lo, hi } = self.domain;
@@ -204,7 +204,7 @@ impl Scale {
         }
         let extent = (self.range.1 - self.range.0).abs();
         match self.kind {
-            // n bands, (n-1) inner gaps, 2 outer gaps — all as fractions of one step.
+            // n bands, (n-1) inner gaps, 2 outer gaps, all as fractions of one step.
             ScaleKind::Band => {
                 extent / (n - self.padding.inner + 2.0 * self.padding.outer).max(1e-9)
             }
@@ -219,8 +219,8 @@ impl Scale {
         }
     }
 
-    /// The drawable width of one band — the step less its inner padding. Zero for a point scale,
-    /// which is the honest answer: a point has no width.
+    /// The drawable width of one band: the step less its inner padding. Zero for a point scale,
+    /// because a point has no width.
     pub fn band_width(&self) -> f64 {
         match self.kind {
             ScaleKind::Band => self.step() * (1.0 - self.padding.inner),
@@ -253,7 +253,7 @@ impl Scale {
         p.clamp(a, b)
     }
 
-    /// Whether a value falls inside the domain — what decides if a mark is drawn at all when the
+    /// Whether a value falls inside the domain, which decides if a mark is drawn at all when the
     /// app pinned the domain itself.
     pub fn contains(&self, d: &Datum) -> bool {
         if self.kind.is_discrete() {
@@ -280,13 +280,13 @@ pub struct ScaleSpec {
     /// Grow an inferred numeric domain to include zero. A bar chart that does not is lying about
     /// its proportions, which is why Swift Charts does this by default for bars.
     pub include_zero: bool,
-    /// Reverse the output range — a y axis that grows downward, or a descending category order.
+    /// Reverse the output range: a y axis that grows downward, or a descending category order.
     pub reversed: bool,
 }
 
 /// Infer a domain from a column of data, honouring whatever the app pinned.
 ///
-/// The inferred continuous domain is the data's own extent, NOT a rounded one: rounding belongs to
+/// The inferred continuous domain is the data's own extent, not a rounded one: rounding belongs to
 /// the tick search, which is free to place labels outside the data (that is its `coverage`
 /// criterion). Rounding here as well would round twice and leave the plot padded oddly.
 pub fn infer(

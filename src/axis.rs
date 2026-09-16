@@ -1,10 +1,10 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 
-//! Axes and the legend — the grammar's *guides*: the marks that describe the scales rather than
+//! Axes and the legend, the grammar's *guides*: the marks that describe the scales rather than
 //! the data.
 //!
-//! What an axis shows is configuration; WHERE its labels go is not. Their positions come from the
+//! What an axis shows is configuration; where its labels go is not. Their positions come from the
 //! tick search in [`crate::ticks`], which reads the axis's measured pixel length, so an axis
 //! relabels itself as the pane resizes instead of carrying a spacing decided when the chart was
 //! written.
@@ -17,8 +17,8 @@ use crate::data::Datum;
 /// reads as noise at both.
 pub type TickFormatter = Rc<dyn Fn(&Datum) -> String>;
 
-/// Which edge an axis is drawn on. `Automatic` is the conventional edge for that channel — the
-/// bottom for x, the leading edge for y — resolved at render time so a right-to-left layout gets
+/// Which edge an axis is drawn on. `Automatic` is the conventional edge for that channel (the
+/// bottom for x, the leading edge for y), resolved at render time so a right-to-left layout gets
 /// the correct side without the app restating it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum AxisPosition {
@@ -43,12 +43,12 @@ pub struct AxisSpec {
     pub ticks: bool,
     pub labels: bool,
     pub position: AxisPosition,
-    /// The axis's own name, drawn only when the app sets one. A data column's name is NOT used as
+    /// The axis's own name, drawn only when the app sets one. A data column's name is not used as
     /// a fallback: under six labels already reading `C1 C2 C3`, a title saying "Category" is noise,
     /// and it costs a line of plot height. Swift Charts asks for the same thing explicitly.
     pub title: Option<String>,
     /// How many labels to aim for. The tick search treats this as a target to be scored against,
-    /// not a promise — an axis too short for five readable labels gets three.
+    /// not a promise: an axis too short for five readable labels gets three.
     pub desired_count: usize,
     /// Pin the tick positions instead of searching for them.
     pub values: Option<Vec<f64>>,
@@ -95,8 +95,8 @@ impl std::fmt::Debug for AxisSpec {
 /// Where the legend sits, or that there is none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum LegendPosition {
-    /// Shown when the color channel is bound to more than one series, hidden otherwise — there is
-    /// nothing to explain about a chart with one series.
+    /// Shown when the color channel is bound to more than one series, hidden otherwise, because
+    /// there is nothing to explain about a chart with one series.
     #[default]
     Automatic,
     Top,

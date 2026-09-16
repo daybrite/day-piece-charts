@@ -5,7 +5,7 @@
 //!
 //! Every mark is positioned in **unit plot space** and handed to the [`Coordinate`] to be placed,
 //! so there is one geometry path rather than one per coordinate system. A bar in polar space comes
-//! out as a wedge because that is what a bar IS in polar space — the renderer does not special-case
+//! out as a wedge because that is what a bar is in polar space; the renderer does not special-case
 //! it, and nothing here knows the words "pie chart".
 
 use day_geometry::Affine;
@@ -68,7 +68,7 @@ fn color_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>) -> Color {
 /// The full band one x position owns, in device points.
 ///
 /// A discrete scale says so itself. A continuous one has no bands, so a bar there takes the
-/// smallest gap between any two bars (`Resolved::x_gap`) less the scale's inner padding — which
+/// smallest gap between any two bars (`Resolved::x_gap`) less the scale's inner padding, which
 /// is what lets a year of daily volume draw as 250 bars that touch nothing, where a fixed share
 /// of the axis would have stacked them on top of one another. With a single bar there is no gap
 /// to measure, and it gets a twenty-fourth of the axis.
@@ -135,7 +135,7 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     if !r.coordinate.is_polar() {
         grid(d, r, paint);
     }
-    // Marks draw in z order, and a stable sort keeps declaration order inside a z — the contract
+    // Marks draw in z order, and a stable sort keeps declaration order inside a z, the contract
     // stacking already relies on.
     let mut order: Vec<usize> = (0..r.marks.len()).collect();
     order.sort_by(|a, b| {
@@ -146,7 +146,7 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Line and area marks are CONNECTED marks: they describe a series, not a datum, so they are
+    // Line and area marks are connected marks: they describe a series, not a datum, so they are
     // gathered by series and drawn as one path. Every other kind draws per mark.
     let mut connected: Vec<(MarkKind, usize)> = Vec::new();
     for i in &order {
@@ -158,7 +158,7 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             }
         }
     }
-    // A pinned domain is the one case a mark can lie outside the plot — the app said where the
+    // A pinned domain is the one case a mark can lie outside the plot: the app said where the
     // axis ends, and the data did not agree. Clip to the plot along each pinned axis only, so a
     // fat point at the last sample of an inferred axis keeps its far half.
     let clip = r.x.explicit_domain || r.y.explicit_domain;
@@ -195,9 +195,9 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     for (kind, si) in connected.iter().filter(|(k, _)| *k == MarkKind::Line) {
         connected_path(d, r, paint, *kind, *si);
     }
-    // Point marks are BATCHED: every datum sharing a symbol, a size, a color and a stroke width
+    // Point marks are batched: every datum sharing a symbol, a size, a color and a stroke width
     // is one stamp rather than one op each (docs/canvas.md "Stamping"). A scatter is the case the
-    // batched op exists for — fifty thousand points drawn individually are fifty thousand ops to
+    // batched op exists for: fifty thousand points drawn individually are fifty thousand ops to
     // build, compare and clone on every frame that re-records, and a scatter re-records whenever
     // any control moves. Grouped, it is one op per distinct appearance, which for a chart is one
     // per series.
@@ -251,9 +251,9 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         }
     }
     if paint.x_axis.grid && !paint.x_axis.hidden {
-        // Dashed, and along the category axis they fall BETWEEN the categories rather than
-        // through them — where one band ends and the next begins is what a reader traces a bar
-        // down to. Swift Charts draws both the same way.
+        // Dashed, and along the category axis they fall between the categories rather than
+        // through them, because where one band ends and the next begins is what a reader traces
+        // a bar down to. Swift Charts draws both the same way.
         let dash = StrokeStyle::dashed(1.0, vec![4.0, 4.0]);
         let xs: Vec<f64> = if r.x.kind.is_discrete() {
             let step = r.x.step();
@@ -292,13 +292,13 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
 
 fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let plot = r.plot;
-    // One measurement for the whole axis: these are FONT metrics, the same for every label, so
+    // One measurement for the whole axis: these are font metrics, the same for every label, so
     // nothing below measures per tick (docs/fonts.md).
     let m = day_core::measure_text("0", paint.label_size, &paint.font);
     let line_h = m.height;
-    // How far a tick label's line box must shift up so its CAP box straddles the gridline instead.
+    // How far a tick label's line box must shift up so its cap box straddles the gridline instead.
     // An axis label is digits, which use none of the descender room the line box reserves, so
-    // centering by the line box sits every label visibly low — half the difference between the
+    // centering by the line box sits every label visibly low, by half the difference between the
     // descent and nothing. The cap middle sits `ascent - cap/2` below the line box top, and the
     // line middle at `height/2`; the gap between them is the correction.
     let cap_lift = m.height / 2.0 - (m.ascent - m.cap_height / 2.0);
@@ -426,7 +426,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             }
             if paint.y_axis.labels {
                 // Aligned against the axis and centered on the tick. The anchor says that
-                // outright, so nothing here has to measure the label first — the backend already
+                // outright, so nothing here has to measure the label first; the backend already
                 // holds the width it is about to draw with (docs/canvas.md "Text"). The lift is
                 // what turns "centered line box" into "centered digits".
                 d.text(
@@ -482,7 +482,7 @@ fn axis_title(spec: &AxisSpec) -> Option<&str> {
 // ---------------------------------------------------------------------------
 
 fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
-    // In polar space a bar is a wedge — the grammar's own answer, not a special case.
+    // In polar space a bar is a wedge: the grammar's answer, not a special case.
     if r.coordinate.is_polar() {
         sector(d, r, paint, p);
         return;
@@ -492,8 +492,8 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     // unstacked bar keep both; a stacked segment keeps only the edges at the ends of its stack.
     let mut round = (true, true);
     let (top, bottom) = if r.y.kind.is_discrete() {
-        // A categorical y — a heat map's rows: the cell is centered on its band, as tall as the
-        // band less the mark's own height dimension.
+        // A categorical y (a heat map's rows): the cell is centered on its band, as tall as the
+        // band less the mark's height dimension.
         let Some(cy) = p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum)) else {
             return;
         };
@@ -506,9 +506,9 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         ) else {
             return;
         };
-        // Clamped to the plot: a bar's baseline is zero, and zero has no position on a log axis
-        // — it projects to an enormous negative and the bar runs off the pane. Clamping puts the
-        // baseline on the axis floor, which is what a bar on a log scale actually means.
+        // Clamped to the plot: a bar's baseline is zero, and zero has no position on a log axis;
+        // it projects to an enormous negative and the bar runs off the pane. Clamping puts the
+        // baseline on the axis floor, which is what a bar on a log scale means.
         let (y0, y1) = (r.y.clamp_to_range(y0), r.y.clamp_to_range(y1));
         // Which stack end landed on which device edge: the value axis can be inverted, so this is
         // read off the projection rather than assumed.
@@ -519,8 +519,8 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         }
         (y0.min(y1), y0.max(y1))
     };
-    // An explicit x span — a histogram bin, a Gantt bar — is the rectangle's own edges; without
-    // one the mark is centered on its position and as wide as its band.
+    // An explicit x span (a histogram bin, a Gantt bar) is the rectangle's edges; without one
+    // the mark is centered on its position and as wide as its band.
     let (left, right) = match (&p.mark.x, &p.mark.x_end) {
         (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
             (Some(a), Some(b)) => (a.min(b), a.max(b)),
@@ -551,9 +551,9 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
 
 /// A rectangle rounded on only the edges the caller asks for.
 ///
-/// Rounding every segment of a stack turns its middles into lozenges and opens seams between the
+/// Rounding every segment of a stack turns its middles into lozenges and opens gaps between the
 /// colors; rounding only the two ends lets the column read as one bar (README "What it does
-/// carefully"). `Shape::RoundedRect` rounds all four corners, so the mixed case is a path — and
+/// carefully"). `Shape::RoundedRect` rounds all four corners, so the mixed case is a path, and
 /// `arc_to` spells each corner as one quarter turn, with a zero radius degenerating to a plain
 /// line into the square corner, which is what makes all four combinations one expression.
 fn rounded_rect(rect: Rect, radius: f64, top: bool, bottom: bool) -> Shape {
@@ -795,8 +795,8 @@ fn append(mut b: PathBuilder, pts: &[Point], interp: Interpolation, start: bool)
 /// Fritsch–Carlson monotone cubic interpolation, as bezier control points.
 ///
 /// The construction is the 1980 paper's: take the secant slopes, average them for an interior
-/// tangent, then CLAMP each tangent into the circle of radius 3 around the neighbouring secants.
-/// That clamp is the whole theorem — it is what guarantees the spline cannot overshoot the data,
+/// tangent, then clamp each tangent into the circle of radius 3 around the neighbouring secants.
+/// That clamp is the whole theorem: it is what guarantees the spline cannot overshoot the data,
 /// so a series of non-negative values never dips below zero on the way between two of them.
 fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
     let n = pts.len();
@@ -851,7 +851,7 @@ fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
     out
 }
 
-/// Everything about a point mark's APPEARANCE — two marks agreeing on all of it are
+/// Everything about a point mark's appearance. Two marks agreeing on all of it are
 /// indistinguishable, which is what lets them share one stamp.
 ///
 /// The two f64s compare by bit pattern rather than by value: they come from the same arithmetic on
@@ -868,7 +868,7 @@ struct PointLook {
 impl PartialEq for PointLook {
     fn eq(&self, other: &Self) -> bool {
         // Bit patterns, not values: every mark in a series reaches these through the same
-        // arithmetic on the same inputs, so equal values are bit-equal — and a degenerate NaN
+        // arithmetic on the same inputs, so equal values are bit-equal, and a degenerate NaN
         // radius groups with itself instead of splitting the batch one op per datum, which is
         // exactly the case `==` would get wrong.
         let bits = |a: f64, b: f64| a.to_bits() == b.to_bits();
@@ -911,7 +911,7 @@ fn point_mark(r: &Resolved, paint: &Paint2<'_>, p: &Placed) -> Option<(PointLook
             Symbol::Circle
         }
     });
-    // symbol_size is an AREA, so the radius is its square root — the encoding is only honest if
+    // symbol_size is an area, so the radius is its square root: the encoding only holds if
     // twice the value is twice the ink.
     let radius = (p.mark.style.symbol_size / std::f64::consts::PI).sqrt();
     Some((
@@ -924,9 +924,9 @@ fn circle(at: Point, r: f64) -> Shape {
     Shape::Ellipse(Rect::new(at.x - r, at.y - r, r * 2.0, r * 2.0))
 }
 
-/// A symbol's geometry, authored around the ORIGIN: the shapes it fills and the shapes it strokes.
+/// A symbol's geometry, authored around the origin: the shapes it fills and the shapes it strokes.
 ///
-/// Around the origin rather than at a point, because that is what a [`Draw::stamp`] template is —
+/// Around the origin rather than at a point, because that is what a [`Draw::stamp`] template is:
 /// one symbol becomes one op however many data points wear it (docs/canvas.md "Stamping").
 fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
     let poly = |n: usize, rot: f64| {
@@ -981,7 +981,7 @@ fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
     }
 }
 
-/// One symbol at every one of `at` — a stamp per part, whatever the count.
+/// One symbol at every one of `at`: a stamp per part, whatever the count.
 fn draw_symbols(d: &mut Draw, sym: Symbol, at: Vec<Point>, r: f64, color: Color, w: f64) {
     if at.is_empty() {
         return;
@@ -997,14 +997,14 @@ fn draw_symbols(d: &mut Draw, sym: Symbol, at: Vec<Point>, r: f64, color: Color,
 
 /// A wedge between two radii, with its own angular span at each of them.
 ///
-/// The two spans differ whenever an angular inset is in force — [`sector`] explains why the inner
+/// The two spans differ whenever an angular inset is in force; [`sector`] explains why the inner
 /// one is the narrower.
 ///
 /// Built from cubic beziers rather than an arc primitive so the donut hole, the angular inset and
 /// the corner radius all compose: an arc op would draw the outer edge and leave the join to the
 /// rasterizer's own arc-to-line rule, which differs between backends.
 fn wedge(center: Point, r0: f64, r1: f64, outer: (f64, f64), inner: (f64, f64)) -> Shape {
-    // Out along the far edge, back along the near one — one closed contour. `PathBuilder::arc_to`
+    // Out along the far edge, back along the near one: one closed contour. `PathBuilder::arc_to`
     // takes degrees (docs/canvas.md "Paths"); the geometry here is in radians. A zero inner radius
     // and a zero-width inner span both collapse to a single point, which `arc_to` reaches with a
     // plain line: a pie's apex, or the blunt tip an inset wedge ends in.
@@ -1025,7 +1025,7 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         Coordinate::polar()
     };
     // The angular extent comes from the stacked bounds, normalized by the total. That is the whole
-    // of "a pie is a normalized stack" — no separate percentage arithmetic.
+    // of "a pie is a normalized stack"; there is no separate percentage arithmetic.
     let total: f64 = r
         .marks
         .iter()
@@ -1060,15 +1060,15 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     );
 }
 
-/// The most of its own outer radius a wedge will spend on an angular inset. Measured off Swift
-/// Charts, which stops widening `angularInset` here — at two plot radii 68pt and 130pt it capped
-/// at 4.93% and 4.99% — and the ceiling is worth having on its own: it keeps an inset chosen for
+/// The most of its outer radius a wedge will spend on an angular inset. Measured off Swift
+/// Charts, which stops widening `angularInset` here (at two plot radii 68pt and 130pt it capped
+/// at 4.93% and 4.99%), and the ceiling is worth having on its own: it keeps an inset chosen for
 /// a full-page chart from swallowing the same chart in a phone-width pane.
 const MAX_INSET_FRACTION: f64 = 0.05;
 
 /// One wedge's geometry once its angular inset is applied.
 struct InsetWedge {
-    /// The inner radius the inset pushes the wedge out to — its own hole, or the blunt tip where
+    /// The inner radius the inset pushes the wedge out to: its hole, or the blunt tip where
     /// the two inset edges converge, whichever is farther from the center.
     inner: f64,
     /// The angular span the wedge keeps at its outer radius, and at [`InsetWedge::inner`]. The
@@ -1079,10 +1079,10 @@ struct InsetWedge {
 
 /// Apply an angular inset to one wedge. `None` when the inset has eaten the slice whole.
 ///
-/// The inset is a DISTANCE, and it is held perpendicular to the edge, so the channel between two
-/// neighbors keeps an even width the whole way in. The ANGLE that distance costs therefore grows as
+/// The inset is a distance, and it is held perpendicular to the edge, so the channel between two
+/// neighbors keeps an even width the whole way in. The angle that distance costs therefore grows as
 /// the radius shrinks: an edge held `gap` away from its radial ray sits `asin(gap / r)` off it.
-/// Spending a single angle on the whole wedge instead — the outer radius' share, say — tapers the
+/// Spending a single angle on the whole wedge instead (the outer radius' share, say) tapers the
 /// channel shut and lets every slice meet at the center.
 fn inset_wedge(gap: f64, a0: f64, a1: f64, inner: f64, outer: f64) -> Option<InsetWedge> {
     let gap = gap.clamp(0.0, outer * MAX_INSET_FRACTION);
@@ -1092,8 +1092,9 @@ fn inset_wedge(gap: f64, a0: f64, a1: f64, inner: f64, outer: f64) -> Option<Ins
     // Where the two inset edges converge: short of the center, and short of the hole when the hole
     // is the smaller. Past a half-circle they never converge, and `gap` itself is as close to the
     // center as either one comes.
-    // A zero-width slice divides by `sin(0)` here and comes back infinite, which is the honest
-    // answer: two coincident edges cross the moment either one is inset, so nothing is left to draw.
+    // A zero-width slice divides by `sin(0)` here and comes back infinite, which is the right
+    // answer: two coincident edges cross the moment either one is inset, so nothing is left to
+    // draw.
     let r_tip = if gap > 0.0 {
         gap / half.min(std::f64::consts::FRAC_PI_2).sin()
     } else {
@@ -1101,7 +1102,7 @@ fn inset_wedge(gap: f64, a0: f64, a1: f64, inner: f64, outer: f64) -> Option<Ins
     };
     let r_in = inner.max(r_tip);
     if outer <= r_in {
-        // The gap has eaten the slice whole — a sliver too thin to survive its own inset.
+        // The gap has eaten the slice whole: a sliver too thin to survive its inset.
         return None;
     }
     let inset_at = |r: f64| {
@@ -1137,9 +1138,9 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     };
     let Some(y) = y else { return };
     let line = day_core::measure_text(&a.text, paint.label_size, &paint.font);
-    // Text laid OVER a bar or a cell has to fit inside it: a heat map's numbers on a phone-width
+    // Text laid over a bar or a cell has to fit inside it: a heat map's numbers on a phone-width
     // grid would otherwise spill into their neighbours and read as one smear. Not drawing a
-    // label is the honest answer there; the color still carries the value.
+    // label is the right answer there; the color still carries the value.
     if a.position == AP::Overlay && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
         let width = match (&p.mark.x, &p.mark.x_end) {
             (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
@@ -1180,12 +1181,12 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
 /// Every mark's device position and labels, for the pointer to hit
 /// (README.md "Selection").
 ///
-/// Built from the SAME `Resolved` the marks were just drawn from, so a selection can only ever
+/// Built from the same `Resolved` the marks were just drawn from, so a selection can only ever
 /// name something on screen, and a pointer move costs a scan of this rather than a re-resolve.
 pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
     let polar = r.coordinate.is_polar();
-    // The axis's own tick step decides how many decimals a value reads with, so a selected value
-    // is rounded exactly like the axis label above it — "58.2", not "58.15339133". The exact
+    // The axis's tick step decides how many decimals a value reads with, so a selected value
+    // is rounded exactly like the axis label above it: "58.2", not "58.15339133". The exact
     // number is still on `SelectedValue::value` for an app that wants full precision.
     let step_of = |ticks: &[crate::ticks::Tick]| match ticks {
         [a, b, ..] => (b.value - a.value).abs(),
@@ -1215,8 +1216,8 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
     }
 }
 
-/// A mark's own x as a label: its category on a discrete axis, its value formatted by the axis's
-/// own formatter otherwise — so the guide's label reads exactly like the axis under it.
+/// A mark's x as a label: its category on a discrete axis, its value formatted by the axis's
+/// formatter otherwise, so the guide's label reads exactly like the axis under it.
 fn x_label_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>, step: f64) -> String {
     match p.mark.x.as_ref().map(|v| &v.datum) {
         Some(Datum::Category(c)) => match &paint.x_axis.format {
@@ -1292,7 +1293,7 @@ pub fn draw_guides(
         .fold(0.0f64, f64::max);
     let pad = 6.0;
     let (bw, bh) = (w + pad * 2.0, line_h * lines.len() as f64 + pad * 2.0);
-    // Right of the rule where it fits, left otherwise — then clamped, so an extreme selection
+    // Right of the rule where it fits, left otherwise, then clamped, so an extreme selection
     // keeps the whole box inside the plot instead of half of it outside.
     let mut bx = sel.at.x + 10.0;
     if bx + bw > plot.origin.x + plot.size.width {
@@ -1367,7 +1368,7 @@ mod inset_tests {
         let b = inset_wedge(gap, step, 2.0 * step, 40.0, 120.0).unwrap();
         assert_eq!(a.inner, 40.0, "a 40pt hole is wider than this inset's tip");
         assert_eq!(b.inner, 40.0);
-        // Each edge sits `gap` from its own ray, outside and inside alike — so the channel between
+        // Each edge sits `gap` from its ray, outside and inside alike, so the channel between
         // the two slices is `2 * gap` wide at both radii, and at every radius between them.
         let pairs = [
             (120.0, a.outer_span.1, b.outer_span.0),

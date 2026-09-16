@@ -4,13 +4,13 @@
 //! From a bag of marks to everything a renderer needs: the position adjustments, the scales, the
 //! ticks, and the plot rectangle.
 //!
-//! This is the whole pipeline, and it is deliberately pure — no canvas, no side effects, one
-//! function from (marks, configuration, size) to a [`Resolved`]. That is what lets the interesting
-//! parts be unit-tested headlessly: stacking arithmetic, domain inference, and the measured layout
-//! are all decided here, and [`crate::render`] only draws what this produced.
+//! This is the whole pipeline, and it is pure: one function from (marks, configuration, size) to a
+//! [`Resolved`], which never touches a canvas. That is what lets the interesting parts be
+//! unit-tested headlessly: stacking arithmetic, domain inference, and the measured layout are all
+//! decided here, and [`crate::render`] only draws what this produced.
 //!
 //! The order matters and follows the grammar: **variables → position adjustment (stacking, dodging)
-//! → scales → guides → coordinates.** Stacking happens in DATA space before any scale exists,
+//! → scales → guides → coordinates.** Stacking happens in data space before any scale exists,
 //! which is the only order that works: a stacked domain is the domain of the sums, not of the
 //! values, and inferring the scale first would clip every stack at the tallest single contribution.
 
@@ -30,7 +30,7 @@ use crate::ticks::{self, LabelFit, Tick};
 #[derive(Clone, Debug)]
 pub struct Placed {
     pub mark: Mark,
-    /// The mark's extent along the value axis, in DATA space, after stacking. For an unstacked
+    /// The mark's extent along the value axis, in data space, after stacking. For an unstacked
     /// mark these are the baseline and the value.
     pub v0: f64,
     pub v1: f64,
@@ -63,8 +63,8 @@ pub struct Resolved {
     /// Titles resolved from the data columns when the app named none.
     pub x_title: Option<String>,
     pub y_title: Option<String>,
-    /// The smallest gap between two distinct bar positions on a CONTINUOUS x axis, in data units
-    /// — what decides how wide a bar on a time axis may be before it overlaps its neighbour.
+    /// The smallest gap between two distinct bar positions on a continuous x axis, in data units,
+    /// which decides how wide a bar on a time axis may be before it overlaps its neighbour.
     /// `None` when there is no such pair.
     pub x_gap: Option<f64>,
 }
@@ -104,8 +104,8 @@ fn stackable(kind: MarkKind) -> bool {
 
 /// Apply the position adjustments: stacking along the value axis, dodging across the band.
 ///
-/// Both are computed in data space and in declaration order. Declaration order is the contract —
-/// the first mark of a series is the bottom of every stack — because any other rule (sorted by
+/// Both are computed in data space and in declaration order. Declaration order is the contract
+/// (the first mark of a series is the bottom of every stack) because any other rule (sorted by
 /// value, say) would make a stack reorder itself as the data changed, which no reader can follow.
 fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
     // Running totals per (kind, x-key), positive and negative accumulated separately so a series
@@ -123,7 +123,7 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
             }
         }
     }
-    // Every dodging group is given the SAME number of slots — the union across the chart — so a
+    // Every dodging group is given the same number of slots (the union across the chart), so a
     // category missing one series leaves a gap where that series would be rather than widening its
     // neighbours. Bars that change width by which data happened to arrive are unreadable.
     let mut all_dodge: Vec<String> = Vec::new();
@@ -264,7 +264,7 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
             }
         }
     }
-    // Each winner is an end on ONE side, unless its stack turned out to be a single segment.
+    // Each winner is an end on one side, unless its stack turned out to be a single segment.
     for (lo, hi) in ends.into_values() {
         if lo != hi {
             out[lo].stack_hi = false;
@@ -299,7 +299,7 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         .find_map(|m| m.y.as_ref().map(|v| v.label.clone()));
     let placed = place(marks, &series);
 
-    // The columns each scale sees. The value axis sees the STACKED bounds, not the raw values —
+    // The columns each scale sees. The value axis sees the stacked bounds, not the raw values;
     // see the module note.
     let x_data: Vec<Datum> = placed
         .iter()
@@ -318,15 +318,15 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         if p.mark.kind == MarkKind::Sector {
             continue; // a sector's quantity is angular; it never sizes the y axis
         }
-        // A categorical y — the rows of a heat map — is a band like a categorical x: the
+        // A categorical y (the rows of a heat map) is a band like a categorical x: the
         // category itself is the datum, and the stacked bounds (which are zero for it) must not
         // reach the scale, or the inferred band would gain a phantom "0" row.
         if let Some(c) = p.mark.y.as_ref().and_then(|v| v.datum.as_category()) {
             y_data.push(Datum::Category(c.to_string()));
             continue;
         }
-        // A mark that measures from a baseline — a bar, an area, anything with an explicit y
-        // span — sizes the axis with both of its edges. A line or a point has no baseline: its
+        // A mark that measures from a baseline (a bar, an area, anything with an explicit y
+        // span) sizes the axis with both of its edges. A line or a point has no baseline: its
         // `v0` is a placeholder zero, and letting it reach the scale would pin every line chart
         // to a zero-based axis whatever the data does.
         let has_baseline = stackable(p.mark.kind) || p.mark.y_end.is_some();
@@ -385,7 +385,7 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     // --- Pass two: measure those labels and settle ---
     // The same rule `render::axis_title` draws by: a title the app set, and nothing else. The
     // inset has to reserve space on exactly that condition, or a title is drawn into whatever sits
-    // under the axis — on a legend-at-the-bottom chart, straight through the legend.
+    // under the axis; on a legend-at-the-bottom chart, straight through the legend.
     let titled = |spec: &AxisSpec| spec.title.as_deref().is_some_and(|t| !t.is_empty());
     let x_titled = titled(cfg.x_axis);
     let y_titled = titled(cfg.y_axis);
@@ -410,7 +410,7 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
             trailing: cfg.legend_insets.trailing + 4.0,
         }
     } else {
-        // The room each axis needs on ITS side, then placed on whichever edge it was put.
+        // The room each axis needs on its side, then placed on whichever edge it was put.
         let y_side = if cfg.y_axis.hidden || !cfg.y_axis.labels {
             line * 0.5
         } else {
@@ -419,9 +419,9 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         let x_side = if cfg.x_axis.hidden || !cfg.x_axis.labels {
             line * 0.5
         } else {
-            // The title is drawn 8pt past the plot plus 1.9 line heights, CENTRED, so it needs
+            // The title is drawn 8pt past the plot plus 1.9 line heights, centered, so it needs
             // half a line more than that beyond it. Allocating one line put it into whatever sat
-            // under the axis — on a legend-at-the-bottom chart, the legend.
+            // under the axis; on a legend-at-the-bottom chart, the legend.
             line + 10.0 + if x_titled { line * 1.6 + 6.0 } else { 0.0 }
         };
         let y_trailing = cfg.y_axis.position == AxisPosition::Trailing;
@@ -519,7 +519,7 @@ fn scales(
         (plot.origin.x, plot.origin.x + plot.size.width),
         x_default,
     );
-    // y's range runs from the BOTTOM of the plot upward, which is the flip that makes larger
+    // y's range runs from the bottom of the plot upward, which is the flip that makes larger
     // values sit higher without every mark restating it.
     let y = infer(
         y_spec,
@@ -608,11 +608,11 @@ fn axis_ticks(
 
 /// The "nice numbers" an axis bound is allowed to land on, within each power of ten.
 ///
-/// A fixed ladder is what makes the bound MONOTONE in the data: the smallest rung at or above a
+/// A fixed ladder is what makes the bound monotone in the data: the smallest rung at or above a
 /// value can only rise as that value rises. Deriving the bound from the tick step instead cannot
-/// promise that, because the step is itself chosen from the data — a stacked bar reaching 152 got
+/// promise that, because the step is itself chosen from the data: a stacked bar reaching 152 got
 /// a step of 50 and an axis to 200, and the same bar reaching 158 got a step of 40 and an axis to
-/// 160, so growing the data made the axis SHRINK and every bar jump upward.
+/// 160, so growing the data made the axis shrink and every bar jump upward.
 const NICE: [f64; 10] = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0];
 
 /// The smallest nice number at or above `v`, and the largest at or below it. Both are
@@ -622,7 +622,7 @@ fn nice_bound(v: f64, up: bool) -> f64 {
         return v;
     }
     if v < 0.0 {
-        // Mirrored: rounding a negative bound "up" moves it toward zero, which is the SMALLER
+        // Mirrored: rounding a negative bound "up" moves it toward zero, which is the smaller
         // magnitude, so the direction flips with the sign.
         return -nice_bound(-v, !up);
     }
@@ -641,18 +641,18 @@ fn nice_bound(v: f64, up: bool) -> f64 {
 /// Round an inferred domain outward to the nearest nice bounds.
 ///
 /// A domain that stops at the data puts the tallest mark against the frame with the top label well
-/// below it. Rounding out gives the marks headroom and puts a labelled gridline at each end — and
+/// below it. Rounding out gives the marks headroom and puts a labelled gridline at each end, and
 /// because [`nice_bound`] reads only the data, the axis can grow as the data grows but never fall
 /// back, which is what a reader watching a live chart needs: bars that shrink when nothing shrank
 /// are worse than bars with too much headroom.
 ///
-/// Only an INFERRED linear domain moves. An app that pinned one said what it wanted, and a log or
-/// time axis rounds to its own kind of bound — a decade, a calendar boundary — not to a rung.
+/// Only an inferred linear domain moves. An app that pinned one said what it wanted, and a log or
+/// time axis rounds to its own kind of bound (a decade, a calendar boundary), not to a rung.
 fn niced(scale: &Scale, spec: &ScaleSpec) -> Option<ScaleSpec> {
     if spec.domain.is_some() || !matches!(scale.kind, ScaleKind::Linear) {
         return None;
     }
-    // Only a domain that REACHES ZERO is rounded, because the ladder is anchored there. A bar or
+    // Only a domain that reaches zero is rounded, because the ladder is anchored there. A bar or
     // area chart is exactly that case and it is the one that needed the headroom. A floating range
     // is left alone: 980..1000 is a price chart, and the nearest rung below 980 is 800, which
     // would flatten the whole line into a ribbon along the top of the plot.
@@ -684,7 +684,7 @@ pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> St
             // to exponent form when they stop being readable. Grouped, a decade stays readable a
             // long way further than it used to: `1,000,000` is a number, `1000000` is a puzzle.
             //
-            // The choice is made for the WHOLE axis, from its domain, not per label: deciding per
+            // The choice is made for the whole axis, from its domain, not per label: deciding per
             // value puts `1e12` directly above `100,000,000` on the same axis, which reads as two
             // different scales rather than one.
             let readable = |x: f64| x == 0.0 || (0.000_001..1e13).contains(&x.abs());

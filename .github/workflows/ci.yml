@@ -33,13 +33,13 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       # tests/grammar.rs: tick selection, scale geometry, the position adjustments and the
-      # monotone spline's no-overshoot guarantee — the same search dayscript/charts.yaml reads
+      # monotone spline's no-overshoot guarantee: the same search dayscript/charts.yaml reads
       # back on device, asserted here in depth and without a toolkit.
       - run: cargo test
 
   # This crate has no native half: every chart is a `Draw` display list, so there is no per-toolkit
   # code and no backend features to check. What is worth proving instead is the claim the README
-  # makes — that the same crate compiles everywhere the display list is replayed. wasm32 is the
+  # makes, that the same crate compiles everywhere the display list is replayed. wasm32 is the
   # one that actually catches things, because it is where a stray `std::time` or a thread-local
   # stops being portable.
   portability:

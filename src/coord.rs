@@ -4,13 +4,13 @@
 //! Coordinate spaces.
 //!
 //! Wilkinson's *Grammar of Graphics* treats the coordinate system as a transformation applied
-//! AFTER the marks are positioned, not as a different kind of chart. That is the design here, and
+//! After the marks are positioned, not as a different kind of chart. That is the design here, and
 //! it is why this crate has no separate pie-chart code: a pie is a normalized stacked bar drawn in
 //! polar coordinates, a rose is a stacked bar with a radial magnitude, and a radar plot is a line
 //! mark whose x axis has been wrapped around a circle. One renderer, two projections.
 //!
-//! Every mark is positioned in **unit plot space** — `u` and `v` in `0..=1`, with `v` measured
-//! upward from the baseline the way a reader thinks about a y axis — and a [`Coordinate`] turns
+//! Every mark is positioned in **unit plot space** (`u` and `v` in `0..=1`, with `v` measured
+//! upward from the baseline the way a reader thinks about a y axis), and a [`Coordinate`] turns
 //! that into device points inside the plot rectangle.
 
 use day_spec::{Point, Rect};
@@ -30,8 +30,8 @@ pub enum Coordinate {
         start_angle: f64,
         /// One full turn is `start_angle + 2π`. A half turn draws a gauge.
         sweep: f64,
-        /// The fraction of the radius left empty at the centre — a donut hole that applies to
-        /// every mark, as distinct from one sector's own `inner_radius`.
+        /// The fraction of the radius left empty at the centre: a donut hole that applies to
+        /// every mark, as distinct from one sector's `inner_radius`.
         hole: f64,
     },
 }
@@ -46,7 +46,7 @@ impl Coordinate {
         }
     }
 
-    /// A polar space with a hole — the donut every part-to-whole chart wants.
+    /// A polar space with a hole, the donut every part-to-whole chart wants.
     pub fn donut(hole: f64) -> Self {
         Coordinate::Polar {
             start_angle: 0.0,
@@ -84,7 +84,7 @@ impl Coordinate {
         }
     }
 
-    /// The centre a polar space turns about — the rectangle's own centre.
+    /// The centre a polar space turns about: the rectangle's centre.
     pub fn center(&self, rect: Rect) -> Point {
         Point::new(
             rect.origin.x + rect.size.width / 2.0,
@@ -99,7 +99,7 @@ impl Coordinate {
     }
 
     /// The device angle for a unit position, in canvas radians. Sector rendering needs the angle
-    /// itself, not just the projected point.
+    /// itself as well as the projected point.
     pub fn angle(&self, u: f64) -> f64 {
         match self {
             Coordinate::Cartesian => 0.0,

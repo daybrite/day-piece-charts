@@ -5,16 +5,16 @@
 //!
 //! The margins around a plot are not a constant. They are exactly as wide as the axis labels that
 //! have to fit in them, and those labels are not known until the scale's domain and the tick search
-//! have run — which themselves need the plot's size. That circularity is real, and this module
+//! have run, which themselves need the plot's size. That circularity is real, and this module
 //! resolves it the way layout engines do: **measure, then settle**.
 //!
 //! 1. Assume a generous margin and compute the ticks that would fit.
 //! 2. Measure those labels with `day::measure_text` and derive the margin they actually need.
 //! 3. Recompute the ticks against the plot rectangle that margin leaves.
 //!
-//! One refinement pass is enough in practice — the second pass changes the axis length by the
-//! difference between an estimated and a measured margin, which moves the label count by at most
-//! one — and stopping at one keeps the draw closure cheap enough to run on every frame of a resize.
+//! One refinement pass is enough: the second pass changes the axis length by the difference
+//! between an estimated and a measured margin, which moves the label count by at most one. And
+//! stopping at one keeps the draw closure cheap enough to run on every frame of a resize.
 
 use day_spec::{Rect, Size};
 

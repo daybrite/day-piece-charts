@@ -1,4 +1,4 @@
-# Charts Demo — UI strings (https://daybrite.dev/docs/localization). Add a locale by dropping a
+# Charts Demo UI strings (https://daybrite.dev/docs/localization). Add a locale by dropping a
 # sibling folder (e.g. locales/fr/app.ftl) and translating.
 
 app_title = Charts Demo
