@@ -224,7 +224,9 @@ fn line_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#lines)**
 
-![Line chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines.png" width="760" alt="Line chart"></kbd>
+</p>
 
 ### Line series with a target
 
@@ -284,7 +286,9 @@ fn line_series() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#lines-target)**
 
-![Line series with a target](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines-target.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines-target.png" width="760" alt="Line series with a target"></kbd>
+</p>
 
 ### Area with a gradient
 
@@ -344,7 +348,9 @@ fn area_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#area)**
 
-![Area with a gradient](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area.png" width="760" alt="Area with a gradient"></kbd>
+</p>
 
 ### Stacked areas
 
@@ -392,7 +398,9 @@ fn area_stacked() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#area-stacked)**
 
-![Stacked areas](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area-stacked.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area-stacked.png" width="760" alt="Stacked areas"></kbd>
+</p>
 
 ### Bar chart with labels
 
@@ -438,7 +446,9 @@ fn bar_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars)**
 
-![Bar chart with labels](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars.png" width="760" alt="Bar chart with labels"></kbd>
+</p>
 
 ### Grouped bar chart
 
@@ -487,7 +497,9 @@ fn bar_grouped() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-grouped)**
 
-![Grouped bar chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-grouped.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-grouped.png" width="760" alt="Grouped bar chart"></kbd>
+</p>
 
 ### Stacked to 100%
 
@@ -529,7 +541,9 @@ fn bar_normalized() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-100)**
 
-![Stacked to 100%](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-100.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-100.png" width="760" alt="Stacked to 100%"></kbd>
+</p>
 
 ### Horizontal bars
 
@@ -565,7 +579,9 @@ fn bar_horizontal() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-horizontal)**
 
-![Horizontal bars](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-horizontal.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-horizontal.png" width="760" alt="Horizontal bars"></kbd>
+</p>
 
 ### Pie chart
 
@@ -600,7 +616,9 @@ fn pie_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#pie)**
 
-![Pie chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/pie.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/pie.png" width="760" alt="Pie chart"></kbd>
+</p>
 
 ### Donut chart
 
@@ -635,7 +653,9 @@ fn donut_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#donut)**
 
-![Donut chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/donut.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/donut.png" width="760" alt="Donut chart"></kbd>
+</p>
 
 ### Scatter plot
 
@@ -706,7 +726,9 @@ fn scatter_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#scatter)**
 
-![Scatter plot](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/scatter.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/scatter.png" width="760" alt="Scatter plot"></kbd>
+</p>
 
 ### Heat map grid
 
@@ -749,7 +771,9 @@ fn heatmap_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#heatmap)**
 
-![Heat map grid](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/heatmap.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/heatmap.png" width="760" alt="Heat map grid"></kbd>
+</p>
 
 ### Time axis
 
@@ -801,7 +825,9 @@ fn time_chart() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#time)**
 
-![Time axis](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/time.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/time.png" width="760" alt="Time axis"></kbd>
+</p>
 
 ### Sparkline
 
@@ -883,7 +909,9 @@ fn sparkline() -> impl Piece {
 
 **[View live](https://daybrite.github.io/day-piece-charts/webapp/#sparkline)**
 
-![Sparkline](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/sparkline.png)
+<p align="center">
+  <kbd><img src="https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/sparkline.png" width="760" alt="Sparkline"></kbd>
+</p>
 
 ## Architecture and dependencies
 
