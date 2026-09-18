@@ -3,10 +3,15 @@
 
 //! Charts Demo: the demo and on-device test app for `day-piece-charts`.
 //!
-//! One page: a picker of chart compositions, the chart itself, a readout of what the pipeline
-//! derives from the data, and a slider that changes how much data there is. Every element carries
-//! a stable id, so `dayscript/charts.yaml` can assert all of it on the iOS Simulator and the
-//! Android emulator.
+//! A navigation app of one page per chart. The first page is this app's own: a picker of five
+//! compositions of one data set, the chart, a readout of what the pipeline derives from it, and a
+//! slider that changes how much data there is. The rest are the gallery from `src/examples.rs`,
+//! the illustrative charts the crate's README documents, one route each.
+//!
+//! The route is the address: it is the URL hash on web-dom, so <https://…/#lines> opens the line
+//! chart and the browser's back button walks the pages, and it is the name
+//! `dayscript`'s `navigate:` step uses, which is how both walkthroughs move between charts. Every
+//! element carries a stable id, so they can assert what is on the page as well as reach it.
 //!
 //! A chart is drawn on the canvas, so a walkthrough cannot read it the way it reads a label. What
 //! it can read is the arithmetic the chart runs before it draws (the inferred domain and the tick
@@ -14,13 +19,18 @@
 //! itself calls. `tests/grammar.rs` in the crate asserts the same numbers on the host.
 
 use day::prelude::*;
+use day_piece_charts::select::{Guides, Selection, Snap};
 use day_piece_charts::ticks::{self, LabelFit};
 use day_piece_charts::{
     AnnotationPosition, Coordinate, Datum, Interpolation, Interval, LegendPosition, Mark, Stacking,
     bar, chart, rect, resolve, sector, sequential, value,
 };
 
-// The mobile entry point; a plain cargo desktop build enters through src/main.rs.
+/// The charts the README documents, one page each.
+mod examples;
+
+// The entry point on iOS, Android, and the web; a plain cargo desktop build enters through
+// src/main.rs.
 day::day_start!(options: window(), root);
 
 // Typed constants for everything under `resource/` (https://daybrite.dev/docs/resources).
@@ -75,6 +85,15 @@ const COMPOSITIONS: [Composition; 5] = [
     Composition::HeatMap,
 ];
 
+/// The compositions' picker entries, in the same order.
+const COMPOSITION_LABELS: [fn() -> day::LocalizedText; 5] = [
+    res::str::comp_grouped,
+    res::str::comp_line,
+    res::str::comp_stacked,
+    res::str::comp_donut,
+    res::str::comp_heatmap,
+];
+
 /// The largest value in the data, which is the top of the heat map's ramp.
 const PEAK: f64 = 47.0;
 
@@ -98,30 +117,87 @@ pub fn window() -> day::WindowOptions {
     }
 }
 
-/// The whole app: title, composition picker, the chart, the pipeline's readout, the data control.
+day::routes! {
+    /// One route per page (https://daybrite.dev/docs/navigation). The key is the app's route,
+    /// which day-dom reflects into the URL hash, so `…/#bars-grouped` opens that chart on a fresh
+    /// load and the browser's history walks the gallery. `dayscript`'s `navigate:` addresses the
+    /// same names, and so does the README's "View live" link beside each example's source.
+    pub(crate) enum Page {
+        Pipeline => "pipeline",
+        Lines => "lines",
+        LinesTarget => "lines-target",
+        Area => "area",
+        AreaStacked => "area-stacked",
+        Bars => "bars",
+        BarsGrouped => "bars-grouped",
+        Bars100 => "bars-100",
+        BarsHorizontal => "bars-horizontal",
+        Pie => "pie",
+        Donut => "donut",
+        Scatter => "scatter",
+        Heatmap => "heatmap",
+        Time => "time",
+        Sparkline => "sparkline",
+    }
+}
+
+/// The whole app: a sidebar of the demo's own page and the gallery, and whichever chart is open.
 pub fn root() -> impl Piece {
     info!("Charts Demo starting");
 
-    // Which composition is drawn. The picker writes it; the marks closure reads it, so the chart
-    // re-records when it changes.
+    // The open page. The nav writes it, a launch deep link writes it before the first frame (the
+    // URL hash on web-dom, `DAY_DEEPLINK` elsewhere), and the browser's back button writes it
+    // again.
+    let page = Signal::new(Page::Pipeline);
+    let mut nav = nav(page)
+        .style(NavStyle::Sidebar)
+        .title(res::str::app_title())
+        .section(res::str::nav_demo())
+        .item(Page::Pipeline, res::str::nav_pipeline(), pipeline_page)
+        .section(res::str::nav_examples());
+    // One row per example, in the order the README documents them. Each row's page is the chart
+    // itself under its name; the chart's own id is the route key, so a screenshot, a route and an
+    // id are all one name.
+    for ex in examples::gallery() {
+        let (title, build) = (ex.title, ex.build);
+        nav = nav.item(ex.page, title(), move || example_page(title, build));
+    }
+    nav.id("nav")
+}
+
+/// One gallery page: the example's name, and the chart the README prints under it.
+fn example_page(title: fn() -> day::LocalizedText, build: fn() -> AnyPiece) -> impl Piece {
+    column((
+        label(title())
+            .font(Font::Headline)
+            .id("charts-example-title"),
+        build(),
+    ))
+    .spacing(8.0)
+    .padding(16.0)
+    .grow()
+}
+
+/// This app's own page: the five compositions of its data, what the pipeline derives from it, and
+/// the control that changes how much of it there is.
+fn pipeline_page() -> impl Piece {
+    // Which of the five compositions is drawn. The picker writes it; the marks closure reads it,
+    // so the chart re-records when it changes.
     let picked = Signal::new(0usize);
     // How many months are plotted. Drives the marks closure and every number in the readout.
     let months = Signal::new(DEFAULT_MONTHS);
+    // What the pointer is over on the Cartesian chart, owned here because two pieces read it: the
+    // chart draws its guides from it, and the readout names it.
+    let selected: Signal<Option<Selection>> = Signal::new(None);
 
     column((
-        label(res::str::app_title())
-            .font(Font::Title)
-            .id("charts-title"),
         labeled(
             res::str::composition(),
             picker(
-                [
-                    res::str::comp_grouped().format(),
-                    res::str::comp_line().format(),
-                    res::str::comp_stacked().format(),
-                    res::str::comp_donut().format(),
-                    res::str::comp_heatmap().format(),
-                ],
+                COMPOSITION_LABELS
+                    .iter()
+                    .map(|name| name().format())
+                    .collect::<Vec<_>>(),
                 picked,
             )
             .id("charts-composition-picker"),
@@ -139,11 +215,14 @@ pub fn root() -> impl Piece {
                 move || composition(picked.get()) == Composition::HeatMap,
                 move || heat_map(months),
             )
-            .otherwise(move || cartesian(picked, months))
+            .otherwise(move || cartesian(picked, months, selected))
         }),))
         .align(HAlign::Center)
-        .grow_w(),
-        readout(picked, months),
+        // The plot takes every point the page has left after the picker, the readout and the
+        // slider, so a window resized in either direction re-records the chart at the new size
+        // instead of padding around a fixed one.
+        .grow(),
+        readout(picked, months, selected),
         section((labeled(
             res::str::months(),
             row((
@@ -162,12 +241,22 @@ pub fn root() -> impl Piece {
 }
 
 /// The Cartesian chart: grouped bars, lines, or a stack, depending on the picker.
-fn cartesian(picked: Signal<usize>, months: Signal<f64>) -> impl Piece {
+fn cartesian(
+    picked: Signal<usize>,
+    months: Signal<f64>,
+    selected: Signal<Option<Selection>>,
+) -> impl Piece {
     chart(move || marks(composition(picked.get()), month_count(months.get())))
         .y_label(res::str::revenue().format())
         .legend(LegendPosition::Bottom)
+        // Hover, tap or drag writes what is under the pointer into `selected`; the chart reads the
+        // same signal back to draw a rule, a ring on each mark and a box naming their values, and
+        // the readout below puts the same selection into words.
+        .select(selected)
+        .snap(Snap::NearestX)
+        .guides(Guides::RULE)
         .id("charts-plot")
-        .frame(320.0, 220.0)
+        .grow()
 }
 
 /// The same two regions as a donut: one sector per region, summed over the months in view.
@@ -190,7 +279,7 @@ fn donut(months: Signal<f64>) -> impl Piece {
     .x_axis_hidden()
     .y_axis_hidden()
     .id("charts-plot")
-    .frame(320.0, 220.0)
+    .grow()
 }
 
 /// The same numbers as a grid: months across, regions down, revenue as the cell's color on the
@@ -220,7 +309,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
     })
     .no_grid()
     .id("charts-plot")
-    .frame(320.0, 220.0)
+    .grow()
 }
 
 /// One mark per region per month, assembled the way the picked composition asks for.
@@ -258,7 +347,11 @@ fn marks(comp: Composition, n: usize) -> Vec<Mark> {
 /// What the chart works out before it draws anything: the composition it assembled, how many
 /// marks that is, the series it found, the domain those values imply, and the tick labelling the
 /// extended-Wilkinson search picks for that domain.
-fn readout(picked: Signal<usize>, months: Signal<f64>) -> impl Piece {
+fn readout(
+    picked: Signal<usize>,
+    months: Signal<f64>,
+    selected: Signal<Option<Selection>>,
+) -> impl Piece {
     section((
         labeled(
             res::str::fact_grammar(),
@@ -293,6 +386,24 @@ fn readout(picked: Signal<usize>, months: Signal<f64>) -> impl Piece {
         labeled(
             res::str::fact_ticks(),
             label(move || tick_summary(month_count(months.get()))).id("charts-ticks"),
+        ),
+        // The one row that comes from the pointer rather than from the data: what the chart
+        // reported into `selected` on the last hover, tap or drag.
+        labeled(
+            res::str::fact_selection(),
+            label(move || match selected.get() {
+                Some(sel) => format!(
+                    "{} \u{b7} {}",
+                    sel.x_label,
+                    sel.values
+                        .iter()
+                        .map(|v| format!("{}: {}", v.series, v.label))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None => res::str::fact_selection_none().format(),
+            })
+            .id("charts-selection"),
         ),
     ))
     .title(res::str::facts_section())

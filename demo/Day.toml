@@ -6,7 +6,13 @@ schema = 1
 id = "dev.daybrite.chartsdemo"
 title = "Charts Demo"
 build = 1
-targets = ["ios-uikit", "android-mdc"]
+targets = [
+    "macos-appkit", "macos-gtk", "macos-qt",
+    "linux-gtk", "linux-qt",
+    "windows-xaml", "windows-gtk", "windows-qt",
+    "ios-uikit", "android-mdc", "harmony-arkui",
+    "web-dom",
+]
 
 # The window's geometry in points (https://daybrite.dev/docs/size-classes). `width`/`height` are
 # the desktop default and the size a desktop-windowing Android window opens at; the minimum is

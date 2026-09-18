@@ -1,8 +1,10 @@
-# The demo's walkthrough (https://daybrite.dev/docs/dayscript), and the crate's on-device test:
-# it runs on the iOS Simulator and the Android emulator in CI, and the same command runs it here.
+# The demo's walkthrough (https://daybrite.dev/docs/dayscript), and the crate's test on a real
+# toolkit: it runs on the iOS Simulator, the Android emulator, and a headless browser in CI, and
+# the same commands run it here.
 #
 #     day launch -p ios-uikit --script dayscript/charts.yaml
 #     day launch -p android-mdc --script dayscript/charts.yaml
+#     day launch -p web-dom --script dayscript/charts.yaml
 #
 # A chart is drawn on the canvas, so nothing here reads the plot itself; the screenshots are what
 # show it. What the assertions read is the arithmetic the chart runs before it draws: the domain
@@ -11,6 +13,9 @@
 name: charts
 description: Switch between the four compositions, change how much data is plotted, and read back what the pipeline derives.
 flow:
+  # This app's own page, by route: the walkthrough says where it is rather than assuming the app
+  # opened there, which is also what makes it independent of whatever ran before it.
+  - navigate: { route: pipeline }
   - wait_for: { id: charts-plot }
   - assert_visible: { id: charts-plot }
 
@@ -74,3 +79,18 @@ flow:
   - assert_text: { id: charts-domain, text: "8 – 18" }
   - assert_text: { id: charts-ticks, text: "6 labels, step 2" }
   - screenshot: charts-quarter
+
+  # The one row that comes from the pointer: a tap reports what is under it into the signal the
+  # chart reads back for its guides, and the readout names the same selection. Which mark lands
+  # under the tap is the first month's, on every target: the plot fills the page, but its left
+  # margin is a couple of label widths wide everywhere, so 70 points in is still the first band —
+  # and within that band, the half the dodged North bar sits in.
+  - tap: { id: charts-plot, at: [70, 110] }
+  - assert_text: { id: charts-selection, text: "Jan · North: 12" }
+  - screenshot: charts-selection
+
+  # Every chart on this page is `.grow()`, so the plot takes whatever the window leaves it and
+  # re-records at the new size: widen the window and the axis relabels itself for the width it now
+  # has, make it tall and narrow and the same data re-spaces into the new shape. There is no step
+  # here for that: `resize:` is wired for android-mdc only (day-cli script.rs), and resizing the
+  # emulator's display costs the pixels the runner's guest is already close to its ceiling on.

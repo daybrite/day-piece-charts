@@ -10,8 +10,14 @@ publish = false
 # `mock` keeps bare cargo and rust-analyzer compiling; `day build` overrides it with
 # `--no-default-features --features <backend>` (https://daybrite.dev/docs/project-structure).
 default = ["mock"]
+appkit = ["day/appkit"]
+gtk = ["day/gtk"]
+qt = ["day/qt"]
 uikit = ["day/uikit"]
 mdc = ["day/mdc"]
+xaml = ["day/xaml"]
+arkui = ["day/arkui"]
+dom = ["day/dom"]
 mock = ["day/mock"]
 
 # rlib for the desktop bin; the mobile pipeline requests staticlib/cdylib via `cargo rustc`.

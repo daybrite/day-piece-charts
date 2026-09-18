@@ -3,8 +3,8 @@ name: ci
 # Three questions, answered on every push and once a day:
 #   host         does the crate build, lint, and pass its host tests (the grammar arithmetic)?
 #   portability  does it compile for the targets it claims to draw the same on?
-#   demo         does the walkthrough pass on the iOS Simulator and the Android emulator,
-#                against day's newest main?
+#   demo         do the two walkthroughs pass on all eight primary platform-toolkit pairs,
+#                against day's newest main, and do they draw what the README says they draw?
 #
 # No Cargo.lock is committed, here or in demo/: this crate tracks an unpublished framework by
 # its bare git URL, so every run resolves day afresh at the tip of main and proves the crate
@@ -23,6 +23,8 @@ on:
 
 permissions:
   contents: write # release-asset upload on tag builds
+  pages: write    # web-dom → GitHub Pages (deploy-web)
+  id-token: write # deploy-pages OIDC token (deploy-web)
 
 jobs:
   host:
@@ -41,7 +43,8 @@ jobs:
   # code and no backend features to check. What is worth proving instead is the claim the README
   # makes, that the same crate compiles everywhere the display list is replayed. wasm32 is the
   # one that actually catches things, because it is where a stray `std::time` or a thread-local
-  # stops being portable.
+  # stops being portable. A wasm32 build that compiles can still panic on its first frame, so the
+  # demo's web-dom leg below runs the same code in a browser.
   portability:
     strategy:
       fail-fast: false
@@ -58,23 +61,41 @@ jobs:
           targets: ${{ matrix.target }}
       - run: cargo clippy --target ${{ matrix.target }} -- -D warnings
 
-  # The proof: the demo app, driven end to end on both platforms by the shared Day workflow. It
-  # builds against day's newest main, runs dayscript/charts.yaml, and fails on a failed assertion
-  # or a blank capture. The plot itself is a canvas, so the assertions read the domain and the
-  # tick labelling the chart derives before drawing, and the screenshots carry the drawing.
-  # Captures are uploaded per target, and a tag build attaches them to the release.
+  # The proof: the demo app, driven end to end on every target by the shared Day workflow. It
+  # builds against day's newest main, runs both dayscripts, and fails on a failed assertion or a
+  # blank capture. The plot itself is a canvas, so the assertions read what the chart derives
+  # before it draws and what a tap on it selects, and the screenshots carry the drawing. Captures
+  # are uploaded per target, and a tag build attaches them to the release.
+  #
+  # Two scripts: charts.yaml asserts what the pipeline derives and that a tap reports a selection,
+  # and gallery.yaml walks the illustrative charts the README documents, selects a value on each
+  # interactive one and captures a screenshot per example, named for the README section that
+  # prints its source.
+  #
+  # All eight primary platform-toolkit pairs, because "no per-toolkit code" is true of this crate
+  # and not of what replays its drawing: every backend decodes the display list itself, and
+  # day-dom decodes a wire format of its own rather than day-spec's `encode_ops`. Text measurement
+  # is a backend duty too, and the plot's margins and tick count are derived from it, so a chart's
+  # layout can differ per backend even though its display list does not. The four `extra` pairs
+  # (macos-gtk, macos-qt, windows-gtk, windows-qt) are declared in demo/Day.toml and buildable by
+  # hand; they are left out here because they add runner time without adding a decoder.
   demo:
     uses: daybrite/actions/.github/workflows/dayapp.yml@main
     secrets: inherit
     with:
       project-path: demo
-      targets: ios-uikit, android-mdc
+      targets: macos-appkit, linux-gtk, linux-qt, windows-xaml, ios-uikit, android-mdc,
+        harmony-arkui, web-dom
       # The CLI that builds, and the framework revision: with no lock committed the shared
       # workflow resolves one fresh, and this moves every leg to the same tip-of-main revision.
       day-version: main
       update-day-deps: true
-      scripts: dayscript/charts.yaml
+      scripts: dayscript/charts.yaml dayscript/gallery.yaml
       preflight-checks: fmt, clippy, test
+      # The web build is published to this repository's Pages on every push to main, so the demo
+      # the README links to is the one the current source produces. It reuses the dist the build
+      # job already made; there is no second build.
+      deploy-web: true
       ios-devices: |
         device=iPhone, orientation=portrait
       android-devices: |

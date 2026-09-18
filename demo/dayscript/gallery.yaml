@@ -1,0 +1,130 @@
+# The gallery walkthrough (https://daybrite.dev/docs/dayscript): every chart the crate's README
+# documents, opened by its own route and captured under that same name. CI runs it on all eight
+# primary platform-toolkit pairs, and the same command runs it here:
+#
+#     day launch -p web-dom --script dayscript/gallery.yaml
+#
+# `navigate:` addresses the routes `day::routes!` declares in src/lib.rs — the names that are also
+# the URL hash on web-dom (…/#lines) and the id of the chart on each page, so one name opens the
+# page, finds the canvas and files the screenshot.
+#
+# The interactive examples are tapped before they are captured, so the screenshot carries the
+# guides the selection draws as well as the chart. The tap lands at x=75, inside the first band on
+# every target: a phone's plot is narrower than a browser's, but its first band still reaches past
+# 75 points, so the selected value is the same everywhere and can be asserted exactly. A target
+# whose margins push the first band right of the tap fails here loudly rather than capturing a
+# chart with no guides on it.
+name: gallery
+description: Open every chart the README documents by its route, select a value on the interactive ones, and capture them.
+flow:
+  - wait_for: { id: nav }
+
+  # The line and its samples: one series, a monotone spline, and a point per datum.
+  - navigate: { route: lines }
+  - wait_for: { id: lines }
+  - assert_text: { id: charts-example-title, text: "Line chart" }
+  - tap: { id: lines, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Jan · 12" }
+  - screenshot: lines
+
+  # Two series and a dashed `rule_y`, which is the decoration most line charts want.
+  - navigate: { route: lines-target }
+  - wait_for: { id: lines-target }
+  - assert_text: { id: charts-example-title, text: "Line series with a target" }
+  - tap: { id: lines-target, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Jan · North: 12, South: 8" }
+  - screenshot: lines-target
+
+  # The gradient fill is a mark style, so the area fades where it meets the axis.
+  - navigate: { route: area }
+  - wait_for: { id: area }
+  - assert_text: { id: charts-example-title, text: "Area with a gradient" }
+  - tap: { id: area, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Mon · 320" }
+  - screenshot: area
+
+  # Areas stack by default; the composition is the marks themselves.
+  - navigate: { route: area-stacked }
+  - wait_for: { id: area-stacked }
+  - assert_text: { id: charts-example-title, text: "Stacked areas" }
+  - tap: { id: area-stacked, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Q1 · Direct: 18, Partner: 30, Online: 36" }
+  - screenshot: area-stacked
+
+  # An annotation rides its bar, so the numbers follow the data rather than the plot.
+  - navigate: { route: bars }
+  - wait_for: { id: bars }
+  - assert_text: { id: charts-example-title, text: "Bar chart with labels" }
+  - tap: { id: bars, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Jan · 12" }
+  - screenshot: bars
+
+  # Dodging is a position adjustment: the same bars, offset within their band.
+  - navigate: { route: bars-grouped }
+  - wait_for: { id: bars-grouped }
+  - assert_text: { id: charts-example-title, text: "Grouped bar chart" }
+  - tap: { id: bars-grouped, at: [75, 200] }
+  - assert_text: { id: charts-example-value, text: "Jan · North: 12" }
+  - screenshot: bars-grouped
+
+  # Normalized stacking turns magnitudes into shares, which is why the axis reads as a percentage.
+  - navigate: { route: bars-100 }
+  - wait_for: { id: bars-100 }
+  - assert_text: { id: charts-example-title, text: "Stacked to 100%" }
+  - screenshot: bars-100
+
+  # A categorical y and an explicit x span: the bar runs along the value axis.
+  - navigate: { route: bars-horizontal }
+  - wait_for: { id: bars-horizontal }
+  - assert_text: { id: charts-example-title, text: "Horizontal bars" }
+  - screenshot: bars-horizontal
+
+  # A pie is a normalized stack in polar coordinates, drawn by the same code that draws the stack.
+  - navigate: { route: pie }
+  - wait_for: { id: pie }
+  - assert_text: { id: charts-example-title, text: "Pie chart" }
+  - screenshot: pie
+
+  # The same wedges with a hole, named by the legend.
+  - navigate: { route: donut }
+  - wait_for: { id: donut }
+  - assert_text: { id: charts-example-title, text: "Donut chart" }
+  - screenshot: donut
+
+  # Points with a symbol per series, so the chart reads without relying on color.
+  - navigate: { route: scatter }
+  - wait_for: { id: scatter }
+  - assert_text: { id: charts-example-title, text: "Scatter plot" }
+  # `Snap::NearestMark` selects only within reach of a point, which is the
+  # behaviour a scatter wants, so a tap into empty space correctly selects
+  # nothing and the readout is not asserted here.
+  - tap: { id: scatter, at: [75, 200] }
+  - screenshot: scatter
+
+  # Both axes categorical and the value in the color, with the cell text switching color across the ramp.
+  - navigate: { route: heatmap }
+  - wait_for: { id: heatmap }
+  - assert_text: { id: charts-example-title, text: "Heat map grid" }
+  - screenshot: heatmap
+
+  # A calendar axis from ISO days, labelling itself by date rather than by number.
+  - navigate: { route: time }
+  - wait_for: { id: time }
+  - assert_text: { id: charts-example-title, text: "Time axis" }
+  # A continuous axis, unlike the banded ones above: the samples sit as far
+  # apart as the plot's width allows, so which one is nearest the tap is not
+  # the same on a phone as in a browser and the value is left to the capture.
+  - tap: { id: time, at: [75, 200] }
+  - screenshot: time
+
+  # `bare()` drops the axes, the grid and the legend, and draws the marks edge to edge.
+  - navigate: { route: sparkline }
+  - wait_for: { id: sparkline }
+  - assert_text: { id: charts-example-title, text: "Sparkline" }
+  - screenshot: sparkline
+
+  # Back to this app's own page. On web-dom every script in a run shares one launch (the sequence
+  # is one app instance), so a script leaves the app where it found it and whatever runs next
+  # starts on the page it expects.
+  - navigate: { route: pipeline }
+  - wait_for: { id: charts-plot }
