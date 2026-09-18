@@ -63,8 +63,11 @@ flow:
   - navigate: { route: bars-grouped }
   - wait_for: { id: bars-grouped }
   - assert_text: { id: charts-example-title, text: "Grouped bar chart" }
+  # Dodging splits the band between the two regions, so which of them sits under a given x is a
+  # question of how wide the band is: 75 points in is North's half of January in a browser and
+  # South's half on a phone. The value is left to the capture; the banded examples above assert
+  # theirs, where one band holds one mark.
   - tap: { id: bars-grouped, at: [75, 200] }
-  - assert_text: { id: charts-example-value, text: "Jan · North: 12" }
   - screenshot: bars-grouped
 
   # Normalized stacking turns magnitudes into shares, which is why the axis reads as a percentage.
