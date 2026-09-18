@@ -1,0 +1,34 @@
+# The project website (https://github.com/daybrite/daysite): a landing page, the screenshot
+# gallery, and the hosted web build. The template is fetched by the shared `dayapp.yml` workflow
+# at build time and deployed to this repository's GitHub Pages, so this file is the whole of the
+# site that lives in the repo.
+#
+# What the site publishes, and where the crate's README links to it:
+#
+#   /webapp/                                  the web build, one route per chart (…/webapp/#lines)
+#   /gallery/web-dom/default/<shot>.png       the captures dayscript/gallery.yaml took
+#   /gallery/gallery.json                     the machine-readable index of all of them
+#
+# Each `screenshot:` step in dayscript/gallery.yaml carries a `title:`, which is what makes it a
+# curated gallery row; the titles match the README's section headings on purpose.
+
+# The canonical URL. The path becomes the Astro base, so a GitHub project page just works.
+host = "https://daybrite.github.io/day-piece-charts"
+
+# This repository publishes a piece rather than a store app, so it carries no store/ listing for
+# the generator to read a name and a description from; both are named here instead.
+title = "Charts Demo"
+tagline = "Every chart day-piece-charts draws, in one app"
+
+# The web build is the one anyone can open, so it is what the platform picker starts on.
+default-platform = "web"
+default-theme = "system"
+accent-color = "#0A84FF"
+
+# There is no store listing to link and no permission to explain: this app reads nothing but the
+# numbers compiled into it.
+show-store-badges = false
+show-permissions = false
+show-source-link = true
+
+footer = "© {year} The Daybrite Project · MPL-2.0"

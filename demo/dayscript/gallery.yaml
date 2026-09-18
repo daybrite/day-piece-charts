@@ -8,6 +8,10 @@
 # the URL hash on web-dom (…/#lines) and the id of the chart on each page, so one name opens the
 # page, finds the canvas and files the screenshot.
 #
+# Each capture carries a `title:`, which is what makes it a curated row in the project website's
+# gallery (`day screenshot index` carries it into gallery.json, and daysite publishes that). The
+# titles are the crate README's section headings, because the README links to these same images.
+#
 # The interactive examples are tapped before they are captured, so the screenshot carries the
 # guides the selection draws as well as the chart. The tap lands at x=75, inside the first band on
 # every target: a phone's plot is narrower than a browser's, but its first band still reaches past
@@ -25,7 +29,7 @@ flow:
   - assert_text: { id: charts-example-title, text: "Line chart" }
   - tap: { id: lines, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · 12" }
-  - screenshot: lines
+  - screenshot: { name: lines, title: "Line chart" }
 
   # Two series and a dashed `rule_y`, which is the decoration most line charts want.
   - navigate: { route: lines-target }
@@ -33,7 +37,7 @@ flow:
   - assert_text: { id: charts-example-title, text: "Line series with a target" }
   - tap: { id: lines-target, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · North: 12, South: 8" }
-  - screenshot: lines-target
+  - screenshot: { name: lines-target, title: "Line series with a target" }
 
   # The gradient fill is a mark style, so the area fades where it meets the axis.
   - navigate: { route: area }
@@ -41,7 +45,7 @@ flow:
   - assert_text: { id: charts-example-title, text: "Area with a gradient" }
   - tap: { id: area, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Mon · 320" }
-  - screenshot: area
+  - screenshot: { name: area, title: "Area with a gradient" }
 
   # Areas stack by default; the composition is the marks themselves.
   - navigate: { route: area-stacked }
@@ -49,7 +53,7 @@ flow:
   - assert_text: { id: charts-example-title, text: "Stacked areas" }
   - tap: { id: area-stacked, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Q1 · Direct: 18, Partner: 30, Online: 36" }
-  - screenshot: area-stacked
+  - screenshot: { name: area-stacked, title: "Stacked areas" }
 
   # An annotation rides its bar, so the numbers follow the data rather than the plot.
   - navigate: { route: bars }
@@ -57,7 +61,7 @@ flow:
   - assert_text: { id: charts-example-title, text: "Bar chart with labels" }
   - tap: { id: bars, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · 12" }
-  - screenshot: bars
+  - screenshot: { name: bars, title: "Bar chart with labels" }
 
   # Dodging is a position adjustment: the same bars, offset within their band.
   - navigate: { route: bars-grouped }
@@ -68,31 +72,31 @@ flow:
   # South's half on a phone. The value is left to the capture; the banded examples above assert
   # theirs, where one band holds one mark.
   - tap: { id: bars-grouped, at: [75, 200] }
-  - screenshot: bars-grouped
+  - screenshot: { name: bars-grouped, title: "Grouped bar chart" }
 
   # Normalized stacking turns magnitudes into shares, which is why the axis reads as a percentage.
   - navigate: { route: bars-100 }
   - wait_for: { id: bars-100 }
   - assert_text: { id: charts-example-title, text: "Stacked to 100%" }
-  - screenshot: bars-100
+  - screenshot: { name: bars-100, title: "Stacked to 100%" }
 
   # A categorical y and an explicit x span: the bar runs along the value axis.
   - navigate: { route: bars-horizontal }
   - wait_for: { id: bars-horizontal }
   - assert_text: { id: charts-example-title, text: "Horizontal bars" }
-  - screenshot: bars-horizontal
+  - screenshot: { name: bars-horizontal, title: "Horizontal bars" }
 
   # A pie is a normalized stack in polar coordinates, drawn by the same code that draws the stack.
   - navigate: { route: pie }
   - wait_for: { id: pie }
   - assert_text: { id: charts-example-title, text: "Pie chart" }
-  - screenshot: pie
+  - screenshot: { name: pie, title: "Pie chart" }
 
   # The same wedges with a hole, named by the legend.
   - navigate: { route: donut }
   - wait_for: { id: donut }
   - assert_text: { id: charts-example-title, text: "Donut chart" }
-  - screenshot: donut
+  - screenshot: { name: donut, title: "Donut chart" }
 
   # Points with a symbol per series, so the chart reads without relying on color.
   - navigate: { route: scatter }
@@ -102,13 +106,13 @@ flow:
   # behaviour a scatter wants, so a tap into empty space correctly selects
   # nothing and the readout is not asserted here.
   - tap: { id: scatter, at: [75, 200] }
-  - screenshot: scatter
+  - screenshot: { name: scatter, title: "Scatter plot" }
 
   # Both axes categorical and the value in the color, with the cell text switching color across the ramp.
   - navigate: { route: heatmap }
   - wait_for: { id: heatmap }
   - assert_text: { id: charts-example-title, text: "Heat map grid" }
-  - screenshot: heatmap
+  - screenshot: { name: heatmap, title: "Heat map grid" }
 
   # A calendar axis from ISO days, labelling itself by date rather than by number.
   - navigate: { route: time }
@@ -118,13 +122,13 @@ flow:
   # apart as the plot's width allows, so which one is nearest the tap is not
   # the same on a phone as in a browser and the value is left to the capture.
   - tap: { id: time, at: [75, 200] }
-  - screenshot: time
+  - screenshot: { name: time, title: "Time axis" }
 
   # `bare()` drops the axes, the grid and the legend, and draws the marks edge to edge.
   - navigate: { route: sparkline }
   - wait_for: { id: sparkline }
   - assert_text: { id: charts-example-title, text: "Sparkline" }
-  - screenshot: sparkline
+  - screenshot: { name: sparkline, title: "Sparkline" }
 
   # Back to this app's own page. On web-dom every script in a run shares one launch (the sequence
   # is one app instance), so a script leaves the app where it found it and whatever runs next

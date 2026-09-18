@@ -12,9 +12,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 `day-piece-charts` draws interactive charts in Day applications using Day's canvas.
 
-**[Try the demo in a browser](https://daybrite.github.io/day-piece-charts/)**. That is
-the web build of [`demo/`](demo/), published from `main` on every push; the same source
-builds the same app for iOS, Android and the desktops. [Examples](#examples) lists every
+**[Try the demo in a browser](https://daybrite.github.io/day-piece-charts/webapp/)**. That
+is the web build of [`demo/`](demo/), published from `main` on every push alongside the
+[project website](https://daybrite.github.io/day-piece-charts/) and its screenshot gallery; the
+same source builds the same app for iOS, Android and the desktops. [Examples](#examples) lists every
 chart in it with the code that draws it.
 
 [Day](https://github.com/daybrite/day) is a Rust framework for building applications
@@ -150,8 +151,10 @@ Most of the [examples](#examples) below are wired this way.
 
 Each chart below is a page of the [demo app](demo/), shown with the code that draws it and a
 screenshot CI captured from that page. Every page has a route, which is the URL hash of the
-published build, so the link under each example opens that chart in the browser. To run the
-gallery locally: `day launch -p web-dom --script dayscript/gallery.yaml`.
+published build, so the link under each example opens that chart in the browser. The pictures
+come from the [project website](https://daybrite.github.io/day-piece-charts/), which CI rebuilds
+from each run's captures; its gallery page carries the same screens as every other platform the
+demo runs on. To take them locally: `day launch -p web-dom --script dayscript/gallery.yaml`.
 
 Most of the charts are interactive. `.select(sig)` reports what the pointer is over into a signal
 the app owns; `.guides(..)` reads that signal back to draw a rule through the position, a ring on
@@ -219,9 +222,9 @@ fn line_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#lines)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#lines)**
 
-![Line chart](SCREENSHOT-URL/lines.png)
+![Line chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines.png)
 
 ### Line series with a target
 
@@ -279,9 +282,9 @@ fn line_series() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#lines-target)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#lines-target)**
 
-![Line series with a target](SCREENSHOT-URL/lines-target.png)
+![Line series with a target](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/lines-target.png)
 
 ### Area with a gradient
 
@@ -339,9 +342,9 @@ fn area_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#area)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#area)**
 
-![Area with a gradient](SCREENSHOT-URL/area.png)
+![Area with a gradient](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area.png)
 
 ### Stacked areas
 
@@ -387,9 +390,9 @@ fn area_stacked() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#area-stacked)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#area-stacked)**
 
-![Stacked areas](SCREENSHOT-URL/area-stacked.png)
+![Stacked areas](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/area-stacked.png)
 
 ### Bar chart with labels
 
@@ -433,9 +436,9 @@ fn bar_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#bars)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars)**
 
-![Bar chart with labels](SCREENSHOT-URL/bars.png)
+![Bar chart with labels](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars.png)
 
 ### Grouped bar chart
 
@@ -482,9 +485,9 @@ fn bar_grouped() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#bars-grouped)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-grouped)**
 
-![Grouped bar chart](SCREENSHOT-URL/bars-grouped.png)
+![Grouped bar chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-grouped.png)
 
 ### Stacked to 100%
 
@@ -524,9 +527,9 @@ fn bar_normalized() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#bars-100)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-100)**
 
-![Stacked to 100%](SCREENSHOT-URL/bars-100.png)
+![Stacked to 100%](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-100.png)
 
 ### Horizontal bars
 
@@ -560,9 +563,9 @@ fn bar_horizontal() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#bars-horizontal)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#bars-horizontal)**
 
-![Horizontal bars](SCREENSHOT-URL/bars-horizontal.png)
+![Horizontal bars](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/bars-horizontal.png)
 
 ### Pie chart
 
@@ -595,9 +598,9 @@ fn pie_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#pie)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#pie)**
 
-![Pie chart](SCREENSHOT-URL/pie.png)
+![Pie chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/pie.png)
 
 ### Donut chart
 
@@ -630,9 +633,9 @@ fn donut_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#donut)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#donut)**
 
-![Donut chart](SCREENSHOT-URL/donut.png)
+![Donut chart](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/donut.png)
 
 ### Scatter plot
 
@@ -701,9 +704,9 @@ fn scatter_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#scatter)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#scatter)**
 
-![Scatter plot](SCREENSHOT-URL/scatter.png)
+![Scatter plot](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/scatter.png)
 
 ### Heat map grid
 
@@ -744,9 +747,9 @@ fn heatmap_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#heatmap)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#heatmap)**
 
-![Heat map grid](SCREENSHOT-URL/heatmap.png)
+![Heat map grid](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/heatmap.png)
 
 ### Time axis
 
@@ -796,9 +799,9 @@ fn time_chart() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#time)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#time)**
 
-![Time axis](SCREENSHOT-URL/time.png)
+![Time axis](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/time.png)
 
 ### Sparkline
 
@@ -878,9 +881,9 @@ fn sparkline() -> impl Piece {
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/#sparkline)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#sparkline)**
 
-![Sparkline](SCREENSHOT-URL/sparkline.png)
+![Sparkline](https://daybrite.github.io/day-piece-charts/gallery/web-dom/default/sparkline.png)
 
 ## Architecture and dependencies
 

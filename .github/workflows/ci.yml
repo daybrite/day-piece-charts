@@ -92,9 +92,11 @@ jobs:
       update-day-deps: true
       scripts: dayscript/charts.yaml dayscript/gallery.yaml
       preflight-checks: fmt, clippy, test
-      # The web build is published to this repository's Pages on every push to main, so the demo
-      # the README links to is the one the current source produces. It reuses the dist the build
-      # job already made; there is no second build.
+      # Publish on every push to main. demo/website/site.toml is the opt-in for the project
+      # website, so what deploys is the daysite build: a landing page, the gallery of the
+      # captures gallery.yaml just took, and the web build under /webapp/. The crate's README
+      # links to both, which is why it carries no images of its own. Without that file this
+      # would deploy the bare web dist to the Pages root instead.
       deploy-web: true
       ios-devices: |
         device=iPhone, orientation=portrait

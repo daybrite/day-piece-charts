@@ -47,8 +47,11 @@ CI runs both on the iOS Simulator, the Android emulator, and a headless browser
 ([../.github/workflows/ci.yml](../.github/workflows/ci.yml)). Each backend decodes the display
 list itself, so the three sets of screenshots are three renderings of the same drawings.
 
-The web build is published to GitHub Pages from `main`, at
-<https://daybrite.github.io/day-piece-charts/>.
+CI publishes a project website for this app from `main` ([daysite](https://github.com/daybrite/daysite),
+configured by [website/site.toml](website/site.toml)): a landing page, a gallery of the captures
+this walkthrough takes on every platform, and the web build itself under
+<https://daybrite.github.io/day-piece-charts/webapp/>. The crate's README links to those images
+rather than carrying any.
 
 ## Build against a local day
 
