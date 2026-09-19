@@ -91,6 +91,16 @@ jobs:
       day-version: main
       update-day-deps: true
       scripts: dayscript/charts.yaml dayscript/gallery.yaml
+      # Every script runs twice, once per theme, so each chart is captured in both palettes:
+      # the project website's gallery gets its light/dark control, and the README shows each
+      # example in whichever palette the reader's GitHub is in (a `<picture>` per image). A
+      # chart draws in the platform's own colors, so this is also where a palette that fails in
+      # the dark becomes visible — the captures are the only place anyone would see it.
+      #
+      # The variant directory is the theme (`gallery/<target>/light/<shot>.png`), which is what
+      # the README links; without this input it is `default`, and adding or removing the input
+      # moves every published image.
+      themes: light dark
       preflight-checks: fmt, clippy, test
       # Publish on every push to main. demo/website/site.toml is the opt-in for the project
       # website, so what deploys is the daysite build: a landing page, the gallery of the
