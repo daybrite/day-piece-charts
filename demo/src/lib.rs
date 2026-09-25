@@ -189,8 +189,36 @@ fn pipeline_page() -> impl Piece {
     // What the pointer is over on the Cartesian chart, owned here because two pieces read it: the
     // chart draws its guides from it, and the readout names it.
     let selected: Signal<Option<Selection>> = Signal::new(None);
+    // A window shorter than the Expanded height class (a phone at 720 points, a tablet in
+    // landscape) cannot fit the picker, the readout, the slider AND a usable plot: grown into
+    // what the controls leave, the chart came out 16 points tall on the HarmonyOS phone, with no
+    // plot to read or tap. So a short window scrolls, and the chart gets a fixed height there.
+    // `size_class()` is tracked (docs/size-classes.md), so a window crossing the breakpoint
+    // re-lays out the page.
+    let tall = day::size_class().is_none_or(|c| c.height == HeightClass::Expanded);
 
-    column((
+    let chart_area = column((when(
+        move || composition(picked.get()) == Composition::Donut,
+        move || donut(months),
+    )
+    .otherwise(move || {
+        when(
+            move || composition(picked.get()) == Composition::HeatMap,
+            move || heat_map(months),
+        )
+        .otherwise(move || cartesian(picked, months, selected))
+    }),))
+    .align(HAlign::Center);
+    // In a tall window the plot takes every point the page has left after the picker, the
+    // readout and the slider, so a window resized in either direction re-records the chart at
+    // the new size instead of padding around a fixed one.
+    let chart_area = if tall {
+        chart_area.grow().any()
+    } else {
+        chart_area.height(SHORT_WINDOW_CHART_HEIGHT).any()
+    };
+
+    let page = column((
         labeled(
             res::str::composition(),
             picker(
@@ -206,22 +234,7 @@ fn pipeline_page() -> impl Piece {
         // rather than of its marks, so it lives in its own subtree and `when` swaps to it. The
         // heat map is Cartesian but titles its y axis by the row column rather than by revenue,
         // so it is a third subtree; the rest share one chart and differ only in the marks.
-        column((when(
-            move || composition(picked.get()) == Composition::Donut,
-            move || donut(months),
-        )
-        .otherwise(move || {
-            when(
-                move || composition(picked.get()) == Composition::HeatMap,
-                move || heat_map(months),
-            )
-            .otherwise(move || cartesian(picked, months, selected))
-        }),))
-        .align(HAlign::Center)
-        // The plot takes every point the page has left after the picker, the readout and the
-        // slider, so a window resized in either direction re-records the chart at the new size
-        // instead of padding around a fixed one.
-        .grow(),
+        chart_area,
         readout(picked, months, selected),
         section((labeled(
             res::str::months(),
@@ -237,8 +250,13 @@ fn pipeline_page() -> impl Piece {
         .title(res::str::data_section()),
     ))
     .spacing(12.0)
-    .padding(16.0)
+    .padding(16.0);
+    if tall { page.any() } else { scroll(page).any() }
 }
+
+/// The chart's height when the page scrolls: room for the legend, the axes and a plot a finger
+/// can pick a bar in, on a phone.
+const SHORT_WINDOW_CHART_HEIGHT: f64 = 300.0;
 
 /// The Cartesian chart: grouped bars, lines, or a stack, depending on the picker.
 fn cartesian(
