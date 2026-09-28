@@ -21,10 +21,11 @@ on:
     # through are the ones most likely to move under it.
     - cron: "0 8 * * *"
 
+# The repository's own jobs run this checkout's code with a read-only token. The write grants
+# sit on the job that calls the shared workflow, whose release and Pages jobs alone use them;
+# its build legs, which run this code too, narrow their token to read-only themselves.
 permissions:
-  contents: write # release-asset upload on tag builds
-  pages: write    # web-dom → GitHub Pages (deploy-web)
-  id-token: write # deploy-pages OIDC token (deploy-web)
+  contents: read
 
 jobs:
   host:
@@ -80,15 +81,16 @@ jobs:
   # (macos-gtk, macos-qt, windows-gtk, windows-qt) are declared in demo/Day.toml and buildable by
   # hand; they are left out here because they add runner time without adding a decoder.
   demo:
-    uses: daybrite/actions/.github/workflows/dayapp.yml@main
+    uses: daybrite/actions/.github/workflows/dayapp.yml@v1
+    permissions:
+      contents: write # release-asset upload on tag builds
+      pages: write    # web-dom → GitHub Pages (deploy-web)
+      id-token: write # deploy-pages OIDC token (deploy-web)
     secrets: inherit
     with:
       project-path: demo
       targets: macos-appkit, linux-gtk, linux-qt, windows-xaml, ios-uikit, android-mdc,
         harmony-arkui, web-dom
-      # The CLI that builds, and the framework revision: with no lock committed the shared
-      # workflow resolves one fresh, and this moves every leg to the same tip-of-main revision.
-      day-version: main
       update-day-deps: true
       scripts: dayscript/charts.yaml dayscript/gallery.yaml
       # Every script runs twice, once per theme, so each chart is captured in both palettes:
