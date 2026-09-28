@@ -1,0 +1,27 @@
+[package]
+name = "day-piece-charts-gallery"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "The day-piece-charts example pages, shared by the Charts Demo app and any app that wants to show them"
+repository = "https://github.com/daybrite/day-piece-charts"
+license = "MPL-2.0"
+publish = false
+
+# The examples the crate's README documents, as pages an app can mount: the Charts Demo is a
+# sidebar of them, and Day-Showcase shows the same pages under its Charts section. One copy of the
+# code, so the two can never drift apart.
+#
+# A library of pages rather than an app: no window, no backend features, and its strings in a
+# private catalog (resource/locales, https://daybrite.dev/docs/localization "Private catalogs"),
+# so they resolve in whichever app mounts it without that app installing them. Like the chart
+# crate, every day dependency names the bare canonical URL so the app's Cargo.lock picks one day
+# revision for the whole graph.
+
+[dependencies]
+day = { git = "https://github.com/daybrite/day.git" }
+day-fluent = { git = "https://github.com/daybrite/day.git" }
+day-piece-charts = { path = ".." }
+
+[build-dependencies]
+day-build = { git = "https://github.com/daybrite/day.git" }

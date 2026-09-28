@@ -26,7 +26,7 @@ flow:
   # The line and its samples: one series, a monotone spline, and a point per datum.
   - navigate: { route: lines }
   - wait_for: { id: lines }
-  - assert_text: { id: charts-example-title, key: ex_line }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_line }
   - tap: { id: lines, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · 12" }
   - screenshot: { name: lines, title: "Line chart" }
@@ -34,7 +34,7 @@ flow:
   # Two series and a dashed `rule_y`, which is the decoration most line charts want.
   - navigate: { route: lines-target }
   - wait_for: { id: lines-target }
-  - assert_text: { id: charts-example-title, key: ex_line_series }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_line_series }
   - tap: { id: lines-target, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · North: 12, South: 8" }
   - screenshot: { name: lines-target, title: "Line series with a target" }
@@ -42,7 +42,7 @@ flow:
   # The gradient fill is a mark style, so the area fades where it meets the axis.
   - navigate: { route: area }
   - wait_for: { id: area }
-  - assert_text: { id: charts-example-title, key: ex_area }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_area }
   - tap: { id: area, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Mon · 320" }
   - screenshot: { name: area, title: "Area with a gradient" }
@@ -50,7 +50,7 @@ flow:
   # Areas stack by default; the composition is the marks themselves.
   - navigate: { route: area-stacked }
   - wait_for: { id: area-stacked }
-  - assert_text: { id: charts-example-title, key: ex_area_stacked }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_area_stacked }
   - tap: { id: area-stacked, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Q1 · Direct: 18, Partner: 30, Online: 36" }
   - screenshot: { name: area-stacked, title: "Stacked areas" }
@@ -58,7 +58,7 @@ flow:
   # An annotation rides its bar, so the numbers follow the data rather than the plot.
   - navigate: { route: bars }
   - wait_for: { id: bars }
-  - assert_text: { id: charts-example-title, key: ex_bar }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_bar }
   - tap: { id: bars, at: [75, 200] }
   - assert_text: { id: charts-example-value, text: "Jan · 12" }
   - screenshot: { name: bars, title: "Bar chart with labels" }
@@ -66,7 +66,7 @@ flow:
   # Dodging is a position adjustment: the same bars, offset within their band.
   - navigate: { route: bars-grouped }
   - wait_for: { id: bars-grouped }
-  - assert_text: { id: charts-example-title, key: ex_bar_grouped }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_bar_grouped }
   # Dodging splits the band between the two regions, so which of them sits under a given x is a
   # question of how wide the band is: 75 points in is North's half of January in a browser and
   # South's half on a phone. The value is left to the capture; the banded examples above assert
@@ -77,19 +77,19 @@ flow:
   # Normalized stacking turns magnitudes into shares, which is why the axis reads as a percentage.
   - navigate: { route: bars-100 }
   - wait_for: { id: bars-100 }
-  - assert_text: { id: charts-example-title, key: ex_bar_normalized }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_bar_normalized }
   - screenshot: { name: bars-100, title: "Stacked to 100%" }
 
   # A categorical y and an explicit x span: the bar runs along the value axis.
   - navigate: { route: bars-horizontal }
   - wait_for: { id: bars-horizontal }
-  - assert_text: { id: charts-example-title, key: ex_bar_horizontal }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_bar_horizontal }
   - screenshot: { name: bars-horizontal, title: "Horizontal bars" }
 
   # A pie is a normalized stack in polar coordinates, drawn by the same code that draws the stack.
   - navigate: { route: pie }
   - wait_for: { id: pie }
-  - assert_text: { id: charts-example-title, key: ex_pie }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_pie }
   - screenshot: { name: pie, title: "Pie chart" }
 
   # The same wedges with a hole: the slider opens the pie into a donut, and the hole animates.
@@ -100,7 +100,7 @@ flow:
   # Points with a symbol per series, so the chart reads without relying on color.
   - navigate: { route: scatter }
   - wait_for: { id: scatter }
-  - assert_text: { id: charts-example-title, key: ex_scatter }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_scatter }
   # `Snap::NearestMark` selects only within reach of a point, which is the
   # behaviour a scatter wants, so a tap into empty space correctly selects
   # nothing and the readout is not asserted here.
@@ -128,13 +128,13 @@ flow:
   # Both axes categorical and the value in the color, with the cell text switching color across the ramp.
   - navigate: { route: heatmap }
   - wait_for: { id: heatmap }
-  - assert_text: { id: charts-example-title, key: ex_heatmap }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_heatmap }
   - screenshot: { name: heatmap, title: "Heat map grid" }
 
   # A calendar axis from ISO days, labelling itself by date rather than by number.
   - navigate: { route: time }
   - wait_for: { id: time }
-  - assert_text: { id: charts-example-title, key: ex_time }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_time }
   # A continuous axis, unlike the banded ones above: the samples sit as far
   # apart as the plot's width allows, so which one is nearest the tap is not
   # the same on a phone as in a browser and the value is left to the capture.
@@ -144,7 +144,7 @@ flow:
   # `bare()` drops the axes, the grid and the legend, and draws the marks edge to edge.
   - navigate: { route: sparkline }
   - wait_for: { id: sparkline }
-  - assert_text: { id: charts-example-title, key: ex_sparkline }
+  - assert_text: { id: charts-example-title, key: day_piece_charts_gallery::ex_sparkline }
   - screenshot: { name: sparkline, title: "Sparkline" }
 
   # Back to this app's own page. On web-dom every script in a run shares one launch (the sequence

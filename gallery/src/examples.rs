@@ -30,7 +30,7 @@ use day::prelude::*;
 use day_piece_charts::select::{Guides, Selection, Snap};
 use day_piece_charts::*;
 
-use crate::{Page, res};
+use crate::{ChartPage as Page, res};
 
 /// One gallery entry: the route that opens it, the row's label, and the chart.
 pub(crate) struct Example {
@@ -1156,7 +1156,10 @@ fn heatmap_chart() -> impl Piece {
                     marks.push(
                         rect(value("Hour", *hour), value("Day", *day))
                             .foreground(fill)
-                            .annotation(AnnotationPosition::Overlay, day::format_decimal(*visits, 0))
+                            .annotation(
+                                AnnotationPosition::Overlay,
+                                day::format_decimal(*visits, 0),
+                            )
                             .annotation_color(if !light {
                                 Color::WHITE
                             } else {

@@ -5,22 +5,28 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Charts Demo
 
-The demo and test app for [`day-piece-charts`](..): a navigation app of one page per chart. The
-first page is this app's own — a picker of five compositions of one data set, the chart, a readout
-of what the pipeline derives from it, and a slider for how much data there is. It depends on the
-piece by path (`day-piece-charts = { path = ".." }`), so a change to the piece and a change here
-land in one pull request and one CI run.
+The demo and test app for [`day-piece-charts`](..): a navigation app of one page per chart.
 
-The other pages are the gallery ([src/examples.rs](src/examples.rs)): the illustrative charts the
-crate's README documents, each one printed there beside the screenshot this app's walkthrough
-captures of it.
+Every page lives in [`day-piece-charts-gallery`](../gallery), a library of the pages that any Day
+app can mount. This app is only the shell around them (a window, a sidebar and the routes), and
+[Day-Showcase](https://github.com/daybrite/Day-Showcase) shows the same pages under its Charts
+section, so a change to an example is a change to both. The demo depends on the gallery by path
+(`day-piece-charts-gallery = { path = "../gallery" }`), and the gallery on the piece, so a change
+to the piece, its examples and this shell lands in one pull request and one CI run.
 
-Every page has a route (`day::routes!` in [src/lib.rs](src/lib.rs)), and one name does three jobs:
-it addresses the page (`navigate: { route: lines }`, and the URL hash of the web build, so
+The first page is the pipeline page ([gallery/src/pipeline.rs](../gallery/src/pipeline.rs)): a
+picker of five compositions of one data set, the chart, a readout of what the pipeline derives
+from it, and a slider for how much data there is. The other pages are the examples
+([gallery/src/examples.rs](../gallery/src/examples.rs)): the illustrative charts the crate's README
+documents, each one printed there beside the screenshot this app's walkthrough captures of it.
+
+Every page has a route (`ChartPage`, a `day::routes!` enum in
+[gallery/src/lib.rs](../gallery/src/lib.rs)), and one name does three jobs: it addresses the page
+(`navigate: { route: lines }`, and the URL hash of the web build, so
 <https://daybrite.github.io/day-piece-charts/#lines> opens the line chart), it is the id of the
 chart on that page, and it is the name its screenshot is filed under. A new example is a function
-in `examples.rs`, a variant in `Page`, an entry in `gallery()`, a name in
-`resource/locales/en/app.ftl`, six lines in `dayscript/gallery.yaml`, and a section in the
+in `gallery/src/examples.rs`, a variant in `ChartPage`, an entry in `gallery()`, a name in
+`gallery/resource/locales/*/app.ftl`, six lines in `dayscript/gallery.yaml`, and a section in the
 README.
 
 The five compositions are the same two regions of monthly revenue assembled five ways — grouped

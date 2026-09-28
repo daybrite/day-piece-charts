@@ -1,5 +1,6 @@
 /target
 /demo/target
+/gallery/target
 /demo/build
 
 # No lock, here or in demo/. Every day crate is a bare git dependency on main, and this
@@ -8,6 +9,7 @@
 # paths of one developer's machine. An app that depends on this crate commits its own lock.
 /Cargo.lock
 /demo/Cargo.lock
+/gallery/Cargo.lock
 
 # Machine-local: `day patch --local <checkout>` writes these to build against a day (or piece)
 # checkout instead of the git dependency. CI has no such file and resolves git.

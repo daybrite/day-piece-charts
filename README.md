@@ -39,6 +39,28 @@ and times through its locale-aware date formatting (`5 mars`, `15:30` in
 French), and a locale switch relabels a chart in place. Chart styling follows
 light/dark appearance unless overridden.
 
+### Show the examples in your own app
+
+Every example below, and the demo's pipeline page, lives in
+[`day-piece-charts-gallery`](gallery), a library of pages rather than an app. The Charts Demo is a
+sidebar of them, and an app of your own can mount the same pages:
+
+```toml
+day-piece-charts-gallery = { git = "https://github.com/daybrite/day-piece-charts.git" }
+```
+
+```rust
+use day_piece_charts_gallery::{ChartPage, gallery};
+
+let open = Signal::new(ChartPage::Scatter);
+gallery(open) // every page, with a picker above whichever is open
+```
+
+`day_piece_charts_gallery::pages()` lists them individually, with their routes and titles, for an
+app that builds its own navigation around them. Their strings come from the gallery's private
+catalog, in English, French, Arabic and Chinese, so they read the same in any host and follow its
+locale.
+
 ### Run the demo on your own machine
 
 Install Day's command-line tool, then run this repository straight from its URL:
