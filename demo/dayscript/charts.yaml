@@ -35,11 +35,13 @@ flow:
   - assert_text: { id: charts-grammar, text: "line, monotone" }
   - assert_text: { id: charts-marks, text: "12" }
   - assert_text: { id: charts-domain, text: "8 – 28" }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
   - screenshot: charts-line
 
   - select: { id: charts-composition-picker, index: 2 }
   - assert_text: { id: charts-grammar, text: "bar, stacked" }
   - assert_text: { id: charts-marks, text: "12" }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
   - screenshot: charts-stacked
 
   # The donut is the polar arm of the `when`: a different chart, because the coordinate system is
@@ -69,6 +71,7 @@ flow:
   - assert_text: { id: charts-marks, text: "24" }
   - assert_text: { id: charts-domain, text: "8 – 47" }
   - assert_text: { id: charts-ticks, text: "5 labels, step 10" }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
   - screenshot: charts-year
 
   # A quarter: the range narrows to 8–18 and the step drops to two, which is the tick search
@@ -78,6 +81,7 @@ flow:
   - assert_text: { id: charts-marks, text: "6" }
   - assert_text: { id: charts-domain, text: "8 – 18" }
   - assert_text: { id: charts-ticks, text: "6 labels, step 2" }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
   - screenshot: charts-quarter
 
   # The one row that comes from the pointer: a tap reports what is under it into the signal the

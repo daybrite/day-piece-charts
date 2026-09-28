@@ -147,6 +147,43 @@ it, while ending a touch drag retains it.
 
 Most of the [examples](#examples) below are wired this way.
 
+### Animation
+
+`.animated()` (or `.animation(spec)` with any Day `AnimSpec`) draws every change to a chart as the
+data moving, on the window's display clock, and asks for no frames once it settles:
+
+```rust
+let months = Signal::new(6usize);
+chart(move || revenue_marks(months.get()))
+    .animated()
+    .frame(480.0, 280.0)
+```
+
+A change made inside `day::with_animation(spec, || ...)` animates with that spec whether or not
+the chart opted in, the contract native widgets keep. Resizing never animates.
+
+The transition understands what the marks mean rather than interpolating pixels:
+
+- **Identity.** Marks are matched across the change by what they encode: a bar by its series and
+  category, a sample on a time series by its instant, a scatter point by its place in its series, a
+  wedge by its series. `Mark::key(..)` names an identity where the data knows better.
+- **Values move in data space**, and the scales' domains move with them, so a bar grows along an
+  axis that is itself rescaling, and a time series slides as its window widens, new samples
+  arriving from beyond the axis edge. The axis cross-fades from its old ticks to its new ones.
+- **Stacks are summed again every frame**, so stacked bars, stacked areas and a pie's wedges never
+  overlap or open gaps while their values change, and a slice that arrives parts its neighbours.
+- **Entering and leaving mean something.** A new bar or wedge grows from its baseline and a
+  removed one shrinks into it; a line's new samples start on the old line and unfold from the
+  nearest category the two charts share, so a series never spikes through zero.
+- **Categories move in device space.** Sorting bars carries each one, with its label, to its new
+  band; a category that is new grows out of its neighbour.
+- **Colors blend perceptually** (OKLab), so a heat map's cells pass through the colors between
+  their old and new values.
+
+The tweening itself is Day's (`day::tween`: `Lerp`, `Timing`, `animate`, `Tweened`), so the same
+machinery is there for any other canvas. Every page of the demo has controls (Randomize data, a
+timeframe, a sort, a slice count, a date range) that exercise these transitions.
+
 ## Examples
 
 Each chart below is a page of the [demo app](demo/), shown with the code that draws it and a
@@ -650,8 +687,10 @@ fn pie_chart() -> impl Piece {
 ### Donut chart
 
 The same wedges with a hole. `Coordinate::donut` takes the hole as a fraction of the
-radius, so that one number covers a pie, a donut and a ring gauge. The legend names the
-slices, because an annotation is positioned from its mark's x and a sector has none.
+radius, so that one number covers a pie, a donut and a ring gauge. Read inside
+`configure`, it follows a signal, and an animated chart blends the hole like any other
+change, so a slider opens the pie into a ring. The legend names the slices, because an
+annotation is positioned from its mark's x and a sector has none.
 
 ```rust
 fn donut_chart() -> impl Piece {
@@ -661,24 +700,29 @@ fn donut_chart() -> impl Piece {
         ("Social", 17.0),
         ("Email", 9.0),
     ];
-    chart(|| {
-        TRAFFIC
-            .iter()
-            .map(|(source, share)| {
-                sector(value("Share", *share))
-                    .by_series(value("Source", *source))
-                    .angular_inset(2.0)
-            })
-            .collect()
-    })
-    .coordinate(Coordinate::donut(0.58))
-    .legend(LegendPosition::Trailing)
-    .id("donut")
-    .grow()
+    let hole = Signal::new(58.0);
+    column((
+        slider(hole).range(0.0..=90.0),
+        chart(|| {
+            TRAFFIC
+                .iter()
+                .map(|(source, share)| {
+                    sector(value("Share", *share))
+                        .by_series(value("Source", *source))
+                        .angular_inset(2.0)
+                })
+                .collect()
+        })
+        .configure(move |c| c.coordinate = Coordinate::donut(hole.get() / 100.0))
+        .legend(LegendPosition::Trailing)
+        .animated()
+        .id("pie")
+        .grow(),
+    ))
 }
 ```
 
-**[View live](https://daybrite.github.io/day-piece-charts/webapp/#donut)**
+**[View live](https://daybrite.github.io/day-piece-charts/webapp/#pie)**
 
 <p align="center">
   <kbd><picture>
@@ -968,6 +1012,7 @@ replays. Nothing survives the pass except the hit model a selection is resolved 
 | Tick choice, label measurement, and the margins labels need | [ticks.rs](src/ticks.rs), [axis.rs](src/axis.rs), [layout.rs](src/layout.rs) |
 | Cartesian and polar projection, and the drawing commands | [coord.rs](src/coord.rs), [render.rs](src/render.rs) |
 | Hit testing, and the guides drawn for a selection | [select.rs](src/select.rs) |
+| Transitions between two resolved charts | [animate.rs](src/animate.rs) |
 | Palettes, and the builders an app calls | [style.rs](src/style.rs), [lib.rs](src/lib.rs) |
 
 Two stages explain most of what a reader notices. Ticks come from an extended-Wilkinson search

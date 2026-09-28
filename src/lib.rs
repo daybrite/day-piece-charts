@@ -52,6 +52,7 @@
 //! re-records. Resizing re-records too, which is what lets the axis relabel itself for the width it
 //! actually has rather than the one it was authored at.
 
+pub mod animate;
 pub mod axis;
 pub mod coord;
 pub mod data;
@@ -79,11 +80,13 @@ pub use ticks::Tick;
 
 use std::rc::Rc;
 
+use day_core::frame::{FrameClock, FrameHandle};
+use day_core::tween::{Timing, animate};
 use day_core::{BuildCx, Piece, RNode};
 use day_pieces::{Draw, TextStyle};
 use day_reactive::Signal;
 use day_spec::props::TextAlign;
-use day_spec::{CanvasFont, Color, Point, Rect, Shape, Size, TextAnchor, TextVAlign};
+use day_spec::{AnimSpec, CanvasFont, Color, Point, Rect, Shape, Size, TextAnchor, TextVAlign};
 
 /// Assigns a color to a series by index and name. Named because the chart stores one and every
 /// stage of the pipeline is handed a reference to it.
@@ -115,7 +118,23 @@ pub struct Chart {
     select: Option<Signal<Option<select::Selection>>>,
     snap: select::Snap,
     guides: select::Guides,
+    transition: Option<AnimSpec>,
+    appear: bool,
 }
+
+/// The transition [`Chart::animated`] uses: a spring that settles in about half a second with a
+/// trace of overshoot, quick enough to follow a slider and soft enough to read as the same data
+/// moving rather than a new chart appearing.
+pub const DEFAULT_TRANSITION: AnimSpec = AnimSpec {
+    duration_ms: 600,
+    delay_ms: 0,
+    curve: day_spec::Curve::Spring {
+        response: 0.6,
+        damping: 0.86,
+    },
+    repeat: 0,
+    autoreverse: false,
+};
 
 /// A chart of the marks the closure produces.
 ///
@@ -142,6 +161,8 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         select: None,
         snap: select::Snap::default(),
         guides: select::Guides::NONE,
+        transition: None,
+        appear: false,
     }
 }
 
@@ -351,6 +372,40 @@ impl Chart {
         self
     }
 
+    // --- Animation ---
+
+    /// Animate every change to what the chart draws with `spec` (README "Animation").
+    ///
+    /// The chart re-records whenever its marks closure or its configuration reads a changed
+    /// signal; with a transition set, each change is drawn as the data moving from the picture on
+    /// screen to the new one: bars grow along a rescaling axis, a time series slides as its window
+    /// widens, a pie's wedges sweep, and mapped colors blend. A change made inside
+    /// `with_animation(spec, ..)` animates with that spec whether or not this is set, the same
+    /// contract native widgets keep. Resizing the chart never animates: the frame the window
+    /// settles on is drawn directly.
+    pub fn animation(mut self, spec: AnimSpec) -> Self {
+        self.transition = Some(spec);
+        self
+    }
+
+    /// [`Chart::animation`] with [`DEFAULT_TRANSITION`].
+    pub fn animated(self) -> Self {
+        self.animation(DEFAULT_TRANSITION)
+    }
+
+    /// Animate the chart's first appearance too, as its data arriving in an empty plot: bars and
+    /// wedges grow from their baselines, areas rise, and lines and points fade in. The chart's
+    /// transition spec is used ([`DEFAULT_TRANSITION`] if none was set). Meant for a chart that
+    /// replaces another in place (an analysis picker swapping panels, a tab opening on a chart),
+    /// where arriving in motion says "this is new" the way a transition says "this changed".
+    pub fn animate_appearance(mut self) -> Self {
+        self.appear = true;
+        if self.transition.is_none() {
+            self.transition = Some(DEFAULT_TRANSITION);
+        }
+        self
+    }
+
     // --- Everything else ---
 
     /// Draw in polar coordinates. A stacked bar becomes a pie; a line becomes a radar trace.
@@ -531,6 +586,85 @@ fn draw_legend(
     }
 }
 
+/// A chart's transition state: what it drew last, and the blend in flight.
+#[derive(Default)]
+struct Motion {
+    /// The last resolved chart the data produced, and the size it was resolved at. Compared whole
+    /// (`Resolved: PartialEq`) with each new one, so a re-record of the same picture (a frame of
+    /// its own transition, the pointer moving over it) is told apart from a change.
+    target: Option<resolve::Resolved>,
+    size: Option<Size>,
+    /// What is on screen, which a new transition starts from, so an interrupted one bends.
+    shown: Option<resolve::Resolved>,
+    /// The transition in flight, matched once when it started, and how far along it is.
+    flight: Option<animate::Transition>,
+    progress: f64,
+    handle: Option<FrameHandle>,
+}
+
+/// Decide what to draw this frame: start, retarget or finish a transition toward `target`.
+fn motion_frame(
+    motion: &Rc<std::cell::RefCell<Motion>>,
+    target: resolve::Resolved,
+    size: Size,
+    spec: Option<AnimSpec>,
+    appear: bool,
+    clock: FrameClock,
+    frame: day_reactive::Trigger,
+) -> resolve::Resolved {
+    let mut m = motion.borrow_mut();
+    let first = m.target.is_none();
+    let changed = m.target.as_ref().is_some_and(|last| *last != target);
+    let resized = m.size.is_some_and(|s| s != size);
+    if first || changed {
+        m.target = Some(target.clone());
+    }
+    m.size = Some(size);
+    // A first appearance starts from the same chart with nothing in it, so every mark enters.
+    let start = if first && appear {
+        let mut empty = target.clone();
+        empty.marks.clear();
+        Some(empty)
+    } else {
+        m.shown.clone()
+    };
+    if changed || resized || (first && appear) {
+        if let Some(h) = m.handle.take() {
+            h.cancel();
+        }
+        m.flight = None;
+        if let (false, Some(spec), Some(shown)) = (resized, spec, start) {
+            m.flight = Some(animate::Transition::new(shown, target.clone()));
+            m.progress = 0.0;
+            // Weak, so the subscription does not keep its own chart alive: a chart removed
+            // mid-flight drops its `Motion`, and with it the handle, which cancels the frames.
+            let state = Rc::downgrade(motion);
+            m.handle = Some(animate(clock, Timing::new(spec), move |s| {
+                let Some(state) = state.upgrade() else {
+                    return;
+                };
+                {
+                    let mut st = state.borrow_mut();
+                    st.progress = s.progress;
+                    // The subscription ends itself on the last sample; its handle stays in place
+                    // (cancelling from inside its own callback is not this closure's business)
+                    // until the next change replaces it.
+                    if s.done {
+                        st.flight = None;
+                    }
+                }
+                frame.notify();
+            }));
+        }
+    }
+    let shown = match &m.flight {
+        Some(flight) => flight.at(m.progress),
+        None => target,
+    };
+    m.shown = Some(shown.clone());
+    shown
+}
+
 /// The parts of a chart's configuration that [`Chart::configure`] may change between draws.
 ///
 /// One struct rather than a reactive setter per knob: a chart has a lot of shape, and an app that
@@ -541,6 +675,9 @@ pub struct ChartConfig {
     pub y_scale: ScaleSpec,
     pub x_axis: AxisSpec,
     pub y_axis: AxisSpec,
+    /// The coordinate system, so a control can bend a chart (a donut's hole, a gauge's sweep)
+    /// without rebuilding it; an animated chart moves between the two.
+    pub coordinate: Coordinate,
 }
 
 impl Piece for Chart {
@@ -564,7 +701,16 @@ impl Piece for Chart {
             select,
             snap,
             guides,
+            transition,
+            appear,
         } = self;
+
+        // The transition in flight, if any (README "Animation"). The draw closure starts one when
+        // the resolved chart changes, a display-frame subscription advances it, and each frame's
+        // re-record draws the blend. Everything the frame callback writes is read back here.
+        let motion: Rc<std::cell::RefCell<Motion>> = Rc::default();
+        let frame = day_reactive::Trigger::new();
+        let clock = FrameClock::current();
 
         // What the last draw positioned, for the pointer to hit (`select::HitModel`). Shared
         // between the draw closure that fills it and the gesture handlers that read it, so hit
@@ -599,18 +745,21 @@ impl Piece for Chart {
             // Read inside the binding, so every signal the closure touches re-records the chart.
             let mut x_axis = x_axis.clone();
             let mut y_axis = y_axis.clone();
+            let mut coordinate = coordinate;
             if let Some(f) = &configure_fn {
                 let mut cfg = ChartConfig {
                     x_scale,
                     y_scale,
                     x_axis,
                     y_axis,
+                    coordinate,
                 };
                 f(&mut cfg);
                 x_scale = cfg.x_scale;
                 y_scale = cfg.y_scale;
                 x_axis = cfg.x_axis;
                 y_axis = cfg.y_axis;
+                coordinate = cfg.coordinate;
             }
 
             // The legend is measured first: it takes its space out of the pane before the plot
@@ -645,7 +794,19 @@ impl Piece for Chart {
                 legend_insets,
                 plot_insets,
             };
-            let resolved = resolve::resolve(ms, size, &cfg);
+            let target = resolve::resolve(ms, size, &cfg);
+            // Subscribed so each frame of a transition re-records; idle, it never fires.
+            frame.track();
+            let resolved = motion_frame(
+                &motion,
+                target,
+                size,
+                // Ambient intent wins, as it does for native widgets.
+                day_core::current_anim().or(transition),
+                appear,
+                clock,
+                frame,
+            );
             let paint = render::Paint2 {
                 chrome: &ch,
                 label_size,

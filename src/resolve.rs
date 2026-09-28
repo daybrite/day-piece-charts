@@ -27,7 +27,7 @@ use crate::scale::{Scale, ScaleKind, ScaleSpec, infer};
 use crate::ticks::{self, LabelFit, Tick};
 
 /// One mark with its position adjustment applied.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Placed {
     pub mark: Mark,
     /// The mark's extent along the value axis, in data space, after stacking. For an unstacked
@@ -45,9 +45,23 @@ pub struct Placed {
     /// one bar rather than a column of separate lozenges.
     pub stack_lo: bool,
     pub stack_hi: bool,
+    /// Where the mark sits on a discrete x axis, in device points: its slot's center (its band,
+    /// narrowed to its dodging slot) and its width. Resolved here like every other position, so
+    /// the renderer never projects a category itself. `None` on a continuous axis, where the
+    /// mark's x is projected through the scale.
+    pub x_band: Option<(f64, f64)>,
+    /// The same for a discrete y axis (a heat map's rows, a horizontal bar's category): the band's
+    /// center and the mark's height in it.
+    pub y_band: Option<(f64, f64)>,
 }
 
 /// Everything the renderer needs.
+///
+/// Equality is structural, and it is what an animated chart uses to tell a new picture from the
+/// same one drawn again (a frame of its own transition, a pointer moving over it). Comparing the
+/// whole value rather than a hand-picked fingerprint means a field added later takes part without
+/// anyone remembering to add it. Floats compare safely because [`resolve`] drops non-finite marks.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
     pub plot: Rect,
     pub x: Scale,
@@ -67,6 +81,9 @@ pub struct Resolved {
     /// which decides how wide a bar on a time axis may be before it overlaps its neighbour.
     /// `None` when there is no such pair.
     pub x_gap: Option<f64>,
+    /// Clip the marks to the plot along both axes. Set for the frames of a transition, when a
+    /// mark sliding in along a widening axis starts outside it.
+    pub clip_plot: bool,
 }
 
 /// What the chart was configured with, gathered so the pipeline takes one argument.
@@ -87,7 +104,7 @@ pub struct Config<'a> {
 }
 
 /// A stable key for "the same x position", used to group marks for stacking and dodging.
-fn key_of(v: &Option<crate::data::Value>) -> String {
+pub(crate) fn key_of(v: &Option<crate::data::Value>) -> String {
     match v {
         Some(v) => match &v.datum {
             Datum::Category(s) => s.clone(),
@@ -98,8 +115,73 @@ fn key_of(v: &Option<crate::data::Value>) -> String {
 }
 
 /// Whether this mark kind participates in stacking at all.
-fn stackable(kind: MarkKind) -> bool {
+pub(crate) fn stackable(kind: MarkKind) -> bool {
     matches!(kind, MarkKind::Bar | MarkKind::Area | MarkKind::Sector)
+}
+
+/// Whether a mark's extent comes from stacking rather than from its own value: a stackable kind
+/// that has not opted out and has no explicit range.
+pub(crate) fn stacks(m: &Mark) -> bool {
+    stackable(m.kind) && m.stacking != Stacking::Unstacked && m.y_end.is_none()
+}
+
+/// Which stack a mark joins: marks of one kind at one x position sum together. A pie's wedges have
+/// no x, so they are one stack.
+pub(crate) type StackKey = (u8, String);
+
+pub(crate) fn stack_key(m: &Mark) -> StackKey {
+    (m.kind as u8, key_of(&m.x))
+}
+
+/// Sum values into stacks, in the order given, and return each one's extent.
+///
+/// Positive and negative values accumulate separately, so a series with mixed signs stacks away
+/// from the baseline in both directions instead of cancelling. Normalized and centred stacks then
+/// need their group's total, which is only known once every entry has been seen. The one
+/// implementation both the pipeline and an animated chart's frames use, so a frame of a transition
+/// partitions its totals exactly the way its endpoints do.
+pub(crate) fn stack(entries: &[(StackKey, f64, Stacking)]) -> Vec<(f64, f64)> {
+    let mut pos: BTreeMap<&StackKey, f64> = BTreeMap::new();
+    let mut neg: BTreeMap<&StackKey, f64> = BTreeMap::new();
+    let mut out: Vec<(f64, f64)> = entries
+        .iter()
+        .map(|(key, value, _)| {
+            let top = if *value >= 0.0 {
+                pos.entry(key).or_insert(0.0)
+            } else {
+                neg.entry(key).or_insert(0.0)
+            };
+            let base = *top;
+            *top += value;
+            (base, *top)
+        })
+        .collect();
+    for ((key, _, stacking), (v0, v1)) in entries.iter().zip(&mut out) {
+        let up = pos.get(key).copied().unwrap_or(0.0);
+        match stacking {
+            Stacking::Normalized => {
+                let total = up - neg.get(key).copied().unwrap_or(0.0);
+                if total.abs() > f64::EPSILON {
+                    *v0 /= total;
+                    *v1 /= total;
+                }
+            }
+            Stacking::Center => {
+                *v0 -= up / 2.0;
+                *v1 -= up / 2.0;
+            }
+            Stacking::Standard | Stacking::Unstacked => {}
+        }
+    }
+    out
+}
+
+/// Whether every position a mark encodes is drawable. See [`Datum::is_finite`].
+fn drawable(m: &Mark) -> bool {
+    [&m.x, &m.x_end, &m.y, &m.y_end]
+        .into_iter()
+        .flatten()
+        .all(|v| v.datum.is_finite())
 }
 
 /// Apply the position adjustments: stacking along the value axis, dodging across the band.
@@ -108,10 +190,6 @@ fn stackable(kind: MarkKind) -> bool {
 /// (the first mark of a series is the bottom of every stack) because any other rule (sorted by
 /// value, say) would make a stack reorder itself as the data changed, which no reader can follow.
 fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
-    // Running totals per (kind, x-key), positive and negative accumulated separately so a series
-    // with mixed signs stacks away from the baseline in both directions instead of cancelling.
-    let mut pos_top: BTreeMap<(u8, String), f64> = BTreeMap::new();
-    let mut neg_top: BTreeMap<(u8, String), f64> = BTreeMap::new();
     // The dodging groups, discovered in order.
     let mut dodge_groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for m in &marks {
@@ -160,22 +238,11 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
                 .unwrap_or(0.0);
         let explicit_end = m.y_end.as_ref().and_then(|v| v.datum.as_continuous());
 
-        let (v0, v1) = if let Some(end) = explicit_end {
-            // An explicit range opts out of stacking entirely: the app said where both edges go.
-            (value, end)
-        } else if stackable(m.kind) && m.stacking != Stacking::Unstacked && value.is_finite() {
-            let key = (m.kind as u8, key_of(&m.x));
-            if value >= 0.0 {
-                let base = *pos_top.get(&key).unwrap_or(&0.0);
-                pos_top.insert(key, base + value);
-                (base, base + value)
-            } else {
-                let base = *neg_top.get(&key).unwrap_or(&0.0);
-                neg_top.insert(key, base + value);
-                (base, base + value)
-            }
-        } else {
-            (0.0, value)
+        // An explicit range opts out of stacking entirely: the app said where both edges go. A
+        // stacked mark's extent is filled in below, once every stack is known.
+        let (v0, v1) = match explicit_end {
+            Some(end) => (value, end),
+            None => (0.0, value),
         };
 
         out.push(Placed {
@@ -187,39 +254,19 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
             dodge_count,
             stack_lo: true,
             stack_hi: true,
+            x_band: None,
+            y_band: None,
         });
     }
 
-    // Normalized and centred stacking are second passes, because both need the group's total,
-    // which is only known once every mark in it has been seen.
-    let normalized: Vec<usize> = out
+    let stacked: Vec<usize> = (0..out.len()).filter(|&i| stacks(&out[i].mark)).collect();
+    let entries: Vec<(StackKey, f64, Stacking)> = stacked
         .iter()
-        .enumerate()
-        .filter(|(_, p)| p.mark.stacking == Stacking::Normalized && stackable(p.mark.kind))
-        .map(|(i, _)| i)
+        .map(|&i| (stack_key(&out[i].mark), out[i].v1, out[i].mark.stacking))
         .collect();
-    if !normalized.is_empty() {
-        for i in normalized {
-            let key = (out[i].mark.kind as u8, key_of(&out[i].mark.x));
-            let total = pos_top.get(&key).copied().unwrap_or(0.0)
-                - neg_top.get(&key).copied().unwrap_or(0.0);
-            if total.abs() > f64::EPSILON {
-                out[i].v0 /= total;
-                out[i].v1 /= total;
-            }
-        }
-    }
-    let centred: Vec<usize> = out
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| p.mark.stacking == Stacking::Center && stackable(p.mark.kind))
-        .map(|(i, _)| i)
-        .collect();
-    for i in centred {
-        let key = (out[i].mark.kind as u8, key_of(&out[i].mark.x));
-        let total = pos_top.get(&key).copied().unwrap_or(0.0);
-        out[i].v0 -= total / 2.0;
-        out[i].v1 -= total / 2.0;
+    for (&i, (v0, v1)) in stacked.iter().zip(stack(&entries)) {
+        out[i].v0 = v0;
+        out[i].v1 = v1;
     }
 
     // Now that every segment's extent is final, find the ends of each stack. Only marks that
@@ -297,6 +344,7 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     let y_title = marks
         .iter()
         .find_map(|m| m.y.as_ref().map(|v| v.label.clone()));
+    let marks: Vec<Mark> = marks.into_iter().filter(drawable).collect();
     let placed = place(marks, &series);
 
     // The columns each scale sees. The value axis sees the stacked bounds, not the raw values;
@@ -455,8 +503,15 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     };
     let plot = insets.apply(size);
     let (x, y) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, plot);
-    let x_ticks = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
-    let y_ticks = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
+    let mut x_ticks = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
+    let mut y_ticks = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
+    place_ticks(&mut x_ticks, &x);
+    place_ticks(&mut y_ticks, &y);
+    let mut placed = placed;
+    for p in &mut placed {
+        p.x_band = x_slot(p, &x);
+        p.y_band = y_slot(p, &y);
+    }
 
     let legend = series
         .iter()
@@ -477,6 +532,49 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         x_title,
         y_title,
         x_gap,
+        clip_plot: false,
+    }
+}
+
+/// A mark's slot on a discrete x axis: its category's band, split between the dodging group and
+/// narrowed by the mark's width dimension. `None` on a continuous axis.
+pub(crate) fn x_slot(p: &Placed, x: &Scale) -> Option<(f64, f64)> {
+    if !x.kind.is_discrete() {
+        return None;
+    }
+    let base = x.project(&p.mark.x.as_ref()?.datum)?;
+    let full = x.band_width();
+    let slot = full / p.dodge_count.max(1) as f64;
+    let center = if p.dodge_count <= 1 {
+        base
+    } else {
+        base - full / 2.0 + slot * (p.dodge_index as f64 + 0.5)
+    };
+    Some((center, p.mark.width.resolve(slot)))
+}
+
+/// A mark's band on a discrete y axis and its height in it. `None` on a continuous axis.
+pub(crate) fn y_slot(p: &Placed, y: &Scale) -> Option<(f64, f64)> {
+    if !y.kind.is_discrete() {
+        return None;
+    }
+    let center = y.project(&p.mark.y.as_ref()?.datum)?;
+    Some((center, p.mark.height.resolve(y.band_width())))
+}
+
+/// Pin each tick on a discrete axis to its category's position, so the renderer draws every tick
+/// where it was told to rather than looking categories up itself. A tick whose label is not a
+/// category (a formatted one) takes the category at its index.
+fn place_ticks(ticks: &mut [Tick], s: &Scale) {
+    if !s.kind.is_discrete() {
+        return;
+    }
+    for (i, t) in ticks.iter_mut().enumerate() {
+        t.at = s.project(&Datum::Category(t.label.clone())).or_else(|| {
+            s.categories
+                .get(i)
+                .and_then(|c| s.project(&Datum::Category(c.clone())))
+        });
     }
 }
 
@@ -553,6 +651,8 @@ fn axis_ticks(
                     Some(f) => f(&Datum::Category(c.clone())),
                     None => c.clone(),
                 },
+                alpha: 1.0,
+                at: None,
             })
             .collect();
     }
@@ -563,6 +663,8 @@ fn axis_ticks(
             .map(|v| Tick {
                 value: *v,
                 label: label_for(*v, scale, spec, 0.0),
+                alpha: 1.0,
+                at: None,
             })
             .collect();
     }
@@ -602,6 +704,8 @@ fn axis_ticks(
         .map(|v| Tick {
             value: *v,
             label: label_for(*v, scale, spec, labelling.step),
+            alpha: 1.0,
+            at: None,
         })
         .collect()
 }

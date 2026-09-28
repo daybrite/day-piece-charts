@@ -89,13 +89,12 @@ flow:
   # A pie is a normalized stack in polar coordinates, drawn by the same code that draws the stack.
   - navigate: { route: pie }
   - wait_for: { id: pie }
-  - assert_text: { id: charts-example-title, text: "Pie chart" }
+  - assert_text: { id: charts-example-title, text: "Pie and donut" }
   - screenshot: { name: pie, title: "Pie chart" }
 
-  # The same wedges with a hole, named by the legend.
-  - navigate: { route: donut }
-  - wait_for: { id: donut }
-  - assert_text: { id: charts-example-title, text: "Donut chart" }
+  # The same wedges with a hole: the slider opens the pie into a donut, and the hole animates.
+  - set_value: { id: charts-hole, value: 58 }
+  - pause: 1.0
   - screenshot: { name: donut, title: "Donut chart" }
 
   # Points with a symbol per series, so the chart reads without relying on color.
@@ -107,6 +106,24 @@ flow:
   # nothing and the readout is not asserted here.
   - tap: { id: scatter, at: [75, 200] }
   - screenshot: { name: scatter, title: "Scatter plot" }
+  # A stress test: a thousand points across four series, every change animated.
+  - set_value: { id: charts-count, value: 1000 }
+  - tap: { id: charts-series-more }
+  - tap: { id: charts-series-more }
+  - assert_text: { id: charts-series, text: "4" }
+  - assert_text: { id: charts-count-value, text: "1000" }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
+  - screenshot: { name: scatter-stress, title: "Scatter plot, 1000 points" }
+  # The same thousand points drawn from another distribution: each one travels to its new place.
+  - select: { id: charts-distribution, index: 2 }
+  - assert_value: { id: charts-distribution, value: 2 }
+  - pause: { secs: 1.0 } # let the chart's transition settle (README "Animation")
+  - screenshot: { name: scatter-normal, title: "Scatter plot, normal clusters" }
+  - select: { id: charts-distribution, index: 0 }
+  - set_value: { id: charts-count, value: 12 }
+  - tap: { id: charts-series-less }
+  - tap: { id: charts-series-less }
+  - assert_text: { id: charts-series, text: "2" }
 
   # Both axes categorical and the value in the color, with the cell text switching color across the ramp.
   - navigate: { route: heatmap }

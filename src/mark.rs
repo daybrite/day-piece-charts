@@ -240,6 +240,9 @@ pub struct Mark {
     pub outer_radius: f64,
     /// Points held between each angular edge and its own radial ray, separating adjacent wedges.
     pub angular_inset: f64,
+    /// The mark's identity across a data change, for an animated chart to match it by
+    /// ([`Mark::key`]). `None` lets the chart derive one from what the mark encodes.
+    pub key: Option<String>,
 }
 
 impl Mark {
@@ -270,7 +273,20 @@ impl Mark {
             inner_radius: 0.0,
             outer_radius: 1.0,
             angular_inset: 0.0,
+            key: None,
         }
+    }
+
+    /// Name this mark's identity, so an animated chart (README "Animation") moves it rather than
+    /// fading it out and a new one in when the data changes.
+    ///
+    /// The chart already derives an identity from what a mark encodes: a bar is its series and
+    /// category, a point on a time series its series and instant, a scatter point its series and
+    /// its place in the series, a wedge its series. Name one when the data says something those
+    /// rules cannot: a scatter of people keyed by who they are, whatever order they arrive in.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
     }
 
     // --- Encoding channels ---

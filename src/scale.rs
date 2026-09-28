@@ -75,7 +75,7 @@ impl Default for BandPadding {
 }
 
 /// A resolved scale: domain, output range, and how to interpolate between them.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Scale {
     pub kind: ScaleKind,
     /// The continuous domain, for a continuous kind.

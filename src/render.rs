@@ -58,10 +58,11 @@ fn color_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>) -> Color {
             .unwrap_or("");
         (paint.series_colors)(p.series_index, name)
     });
-    if p.mark.style.opacity >= 1.0 {
+    let alpha = p.mark.style.opacity.clamp(0.0, 1.0);
+    if alpha >= 1.0 {
         base
     } else {
-        base.with_alpha(base.a * p.mark.style.opacity)
+        base.with_alpha(base.a * alpha)
     }
 }
 
@@ -95,13 +96,19 @@ fn full_band(r: &Resolved) -> f64 {
 }
 
 /// The band a mark occupies along x, in device points, narrowed by its dodging slot.
-fn band_of(p: &Placed, r: &Resolved) -> f64 {
+pub(crate) fn band_of(p: &Placed, r: &Resolved) -> f64 {
+    if let Some((_, w)) = p.x_band {
+        return w;
+    }
     let slot = full_band(r) / p.dodge_count.max(1) as f64;
     p.mark.width.resolve(slot)
 }
 
 /// The center of a mark along x, in device points, offset into its dodging slot.
-fn center_x(p: &Placed, r: &Resolved) -> Option<f64> {
+pub(crate) fn center_x(p: &Placed, r: &Resolved) -> Option<f64> {
+    if let Some((x, _)) = p.x_band {
+        return Some(x);
+    }
     let base = r.x.project(&p.mark.x.as_ref()?.datum)?;
     if p.dodge_count <= 1 {
         return Some(base);
@@ -122,6 +129,22 @@ fn fill_paint(p: &Placed, color: Color) -> Paint {
         }
         None => color.into(),
     }
+}
+
+/// `c` drawn at `alpha` of its own opacity: a tick's.
+fn faded(c: Color, alpha: f64) -> Color {
+    if alpha >= 1.0 {
+        c
+    } else {
+        c.with_alpha(c.a * alpha.max(0.0))
+    }
+}
+
+/// Whether a device coordinate lies on the plot along one axis, with half a point to spare for
+/// the gridlines drawn exactly on its edges. A tick sliding off an axis in a transition is
+/// dropped at the edge rather than drawn over the neighbouring chrome.
+fn within(v: f64, origin: f64, extent: f64) -> bool {
+    v >= origin - 0.5 && v <= origin + extent + 0.5
 }
 
 /// Draw the whole chart.
@@ -161,16 +184,16 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     // A pinned domain is the one case a mark can lie outside the plot: the app said where the
     // axis ends, and the data did not agree. Clip to the plot along each pinned axis only, so a
     // fat point at the last sample of an inferred axis keeps its far half.
-    let clip = r.x.explicit_domain || r.y.explicit_domain;
+    let clip = r.x.explicit_domain || r.y.explicit_domain || r.clip_plot;
     if clip {
         let far = 1.0e5;
         let plot = r.plot;
-        let (cx, cw) = if r.x.explicit_domain {
+        let (cx, cw) = if r.x.explicit_domain || r.clip_plot {
             (plot.origin.x, plot.size.width)
         } else {
             (plot.origin.x - far, plot.size.width + 2.0 * far)
         };
-        let (cy, chh) = if r.y.explicit_domain {
+        let (cy, chh) = if r.y.explicit_domain || r.clip_plot {
             (plot.origin.y, plot.size.height)
         } else {
             (plot.origin.y - far, plot.size.height + 2.0 * far)
@@ -238,13 +261,16 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let plot = r.plot;
     if paint.y_axis.grid && !paint.y_axis.hidden {
         for t in &r.y_ticks {
-            if let Some(y) = r.y.project(&Datum::Number(t.value)) {
+            if let Some(y) = r.y.project(&Datum::Number(t.value))
+                && t.alpha > 0.01
+                && within(y, plot.origin.y, plot.size.height)
+            {
                 d.stroke(
                     Shape::Line(
                         Point::new(plot.origin.x, y),
                         Point::new(plot.origin.x + plot.size.width, y),
                     ),
-                    paint.chrome.grid_line,
+                    faded(paint.chrome.grid_line, t.alpha),
                     1.0,
                 );
             }
@@ -255,26 +281,27 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         // through them, because where one band ends and the next begins is what a reader traces
         // a bar down to. Swift Charts draws both the same way.
         let dash = StrokeStyle::dashed(1.0, vec![4.0, 4.0]);
-        let xs: Vec<f64> = if r.x.kind.is_discrete() {
+        let xs: Vec<(f64, f64)> = if r.x.kind.is_discrete() {
             let step = r.x.step();
             let mut xs = Vec::with_capacity(r.x.categories.len() + 1);
             for c in &r.x.categories {
                 if let Some(x) = r.x.project(&Datum::Category(c.clone())) {
-                    xs.push(x - step / 2.0);
+                    xs.push((x - step / 2.0, 1.0));
                 }
             }
-            if let Some(last) = xs.last().copied() {
-                xs.push(last + step);
+            if let Some((last, _)) = xs.last().copied() {
+                xs.push((last + step, 1.0));
             }
             xs
         } else {
             r.x_ticks
                 .iter()
-                .filter_map(|t| r.x.project(&Datum::Number(t.value)))
+                .filter(|t| t.alpha > 0.01)
+                .filter_map(|t| Some((r.x.project(&Datum::Number(t.value))?, t.alpha)))
                 .collect()
         };
         let (lo, hi) = (plot.origin.x - 0.5, plot.origin.x + plot.size.width + 0.5);
-        for x in xs {
+        for (x, alpha) in xs {
             if x < lo || x > hi {
                 continue;
             }
@@ -283,7 +310,7 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                     Point::new(x, plot.origin.y),
                     Point::new(x, plot.origin.y + plot.size.height),
                 ),
-                paint.chrome.grid_line,
+                faded(paint.chrome.grid_line, alpha),
                 dash.clone(),
             );
         }
@@ -334,21 +361,16 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 1.0,
             );
         }
-        for (i, t) in r.x_ticks.iter().enumerate() {
-            let x = if r.x.kind.is_discrete() {
-                r.x.project(&Datum::Category(t.label.clone())).or_else(|| {
-                    r.x.categories
-                        .get(i)
-                        .and_then(|c| r.x.project(&Datum::Category(c.clone())))
-                })
-            } else {
-                r.x.project(&Datum::Number(t.value))
-            };
+        for t in &r.x_ticks {
+            let x = t.at.or_else(|| r.x.project(&Datum::Number(t.value)));
             let Some(x) = x else { continue };
+            if t.alpha <= 0.01 || !within(x, plot.origin.x, plot.size.width) {
+                continue;
+            }
             if paint.x_axis.ticks {
                 d.stroke(
                     Shape::Line(Point::new(x, y), Point::new(x, y + 4.0 * away)),
-                    paint.chrome.tick,
+                    faded(paint.chrome.tick, t.alpha),
                     1.0,
                 );
             }
@@ -357,7 +379,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                     &t.label,
                     Point::new(x, y + 6.0 * away),
                     label(
-                        paint.chrome.label,
+                        faded(paint.chrome.label, t.alpha),
                         TextAnchor {
                             h: TextAlign::Center,
                             v: v_anchor,
@@ -408,19 +430,16 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 1.0,
             );
         }
-        for (i, t) in r.y_ticks.iter().enumerate() {
-            let y = if r.y.kind.is_discrete() {
-                r.y.categories
-                    .get(i)
-                    .and_then(|c| r.y.project(&Datum::Category(c.clone())))
-            } else {
-                r.y.project(&Datum::Number(t.value))
-            };
+        for t in &r.y_ticks {
+            let y = t.at.or_else(|| r.y.project(&Datum::Number(t.value)));
             let Some(y) = y else { continue };
+            if t.alpha <= 0.01 || !within(y, plot.origin.y, plot.size.height) {
+                continue;
+            }
             if paint.y_axis.ticks {
                 d.stroke(
                     Shape::Line(Point::new(x + 4.0 * away, y), Point::new(x, y)),
-                    paint.chrome.tick,
+                    faded(paint.chrome.tick, t.alpha),
                     1.0,
                 );
             }
@@ -433,7 +452,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                     &t.label,
                     Point::new(x + 8.0 * away, y - cap_lift),
                     label(
-                        paint.chrome.label,
+                        faded(paint.chrome.label, t.alpha),
                         TextAnchor {
                             h: h_anchor,
                             v: TextVAlign::Middle,
@@ -494,10 +513,7 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let (top, bottom) = if r.y.kind.is_discrete() {
         // A categorical y (a heat map's rows): the cell is centered on its band, as tall as the
         // band less the mark's height dimension.
-        let Some(cy) = p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum)) else {
-            return;
-        };
-        let h = p.mark.height.resolve(r.y.band_width());
+        let Some((cy, h)) = p.y_band else { return };
         (cy - h / 2.0, cy + h / 2.0)
     } else {
         let (Some(y0), Some(y1)) = (
@@ -1132,11 +1148,17 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     // On a categorical y the mark IS the band, so the annotation keys off the category, not the
     // stacked value it does not have.
     let y = if r.y.kind.is_discrete() {
-        p.mark.y.as_ref().and_then(|v| r.y.project(&v.datum))
+        p.y_band.map(|(y, _)| y)
     } else {
         r.y.project(&Datum::Number(p.v1))
     };
     let Some(y) = y else { return };
+    // A mark's opacity is the whole mark's, its label included: a bar fading out of a
+    // transition takes its value with it.
+    let opacity = p.mark.style.opacity.clamp(0.0, 1.0);
+    if opacity <= 0.01 {
+        return;
+    }
     let line = day_core::measure_text(&a.text, paint.label_size, &paint.font);
     // Text laid over a bar or a cell has to fit inside it: a heat map's numbers on a phone-width
     // grid would otherwise spill into their neighbours and read as one smear. Not drawing a
@@ -1167,7 +1189,10 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         at,
         TextStyle {
             size: paint.label_size,
-            color: a.color.unwrap_or(paint.chrome.label),
+            color: {
+                let c = a.color.unwrap_or(paint.chrome.label);
+                c.with_alpha(c.a * opacity)
+            },
             anchor: TextAnchor::CENTERED,
             font: paint.font.clone(),
         },

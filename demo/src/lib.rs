@@ -133,7 +133,6 @@ day::routes! {
         Bars100 => "bars-100",
         BarsHorizontal => "bars-horizontal",
         Pie => "pie",
-        Donut => "donut",
         Scatter => "scatter",
         Heatmap => "heatmap",
         Time => "time",
@@ -273,6 +272,9 @@ fn cartesian(
         .select(selected)
         .snap(Snap::NearestX)
         .guides(Guides::RULE)
+        // The months slider and the composition picker both change what the chart draws; each
+        // change animates (README "Animation"): the window widens, bars grow, lines extend.
+        .animated()
         .id("charts-plot")
         .grow()
 }
@@ -293,6 +295,7 @@ fn donut(months: Signal<f64>) -> impl Piece {
     })
     .coordinate(Coordinate::donut(0.55))
     .legend(LegendPosition::Bottom)
+    .animated()
     .no_grid()
     .x_axis_hidden()
     .y_axis_hidden()
@@ -326,6 +329,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
         out
     })
     .no_grid()
+    .animated()
     .id("charts-plot")
     .grow()
 }

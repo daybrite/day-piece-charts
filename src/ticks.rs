@@ -35,6 +35,12 @@ use crate::data::Interval;
 pub struct Tick {
     pub value: f64,
     pub label: String,
+    /// How opaque the tick's gridline and label are drawn, `1` normally, the way a mark has an
+    /// opacity: an axis cross-fading into another is drawn at less.
+    pub alpha: f64,
+    /// Where a discrete axis draws this tick, in device points along it: its category's band
+    /// center, resolved with the scale. `None` on a continuous axis, which projects `value`.
+    pub at: Option<f64>,
 }
 
 /// The step multipliers the extended Wilkinson algorithm prefers, most-preferred first. Order is
