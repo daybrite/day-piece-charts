@@ -33,9 +33,11 @@ scatter plots, heat maps, pies, and donuts.
 
 Capabilities include stacking and grouping, linear/log/power/time/category scales,
 custom labels and colors, legends, annotations, gradients, and pointer/touch
-selection. Data read from Day signals updates automatically. Numeric axis labels
-use Day's locale-aware number formatting, and chart styling follows light/dark
-appearance unless overridden.
+selection. Data read from Day signals updates automatically. Axis labels follow
+the current locale: numbers through Day's locale-aware number formatting, dates
+and times through its locale-aware date formatting (`5 mars`, `15:30` in
+French), and a locale switch relabels a chart in place. Chart styling follows
+light/dark appearance unless overridden.
 
 ### Run the demo on your own machine
 
@@ -858,7 +860,9 @@ fn heatmap_chart() -> impl Piece {
 ### Time axis
 
 `date` reads an ISO day into an instant, and a column of instants labels itself by
-calendar rather than by number. `y_axis_trailing` puts the scale beside the latest value,
+calendar rather than by number, at the precision the axis spans (clock times, days, months or
+years) and in the reader's locale: `Mar 5` and `3:30 PM` in English, `5 mars` and `15:30` in
+French. `y_axis_trailing` puts the scale beside the latest value,
 where a price chart keeps it.
 
 ```rust
@@ -1032,7 +1036,7 @@ drawing types, [day-pieces](https://github.com/daybrite/day/tree/main/crates/day
 canvas, [day-reactive](https://github.com/daybrite/day/tree/main/crates/day-reactive) for
 bindings, [day-geometry](https://github.com/daybrite/day/tree/main/crates/day-geometry) for
 geometry, and [day-l10n](https://github.com/daybrite/day/tree/main/crates/day-l10n) for
-locale-aware numbers, which brings Day's
+locale-aware numbers and dates, which brings Day's
 [ICU4X](https://github.com/unicode-org/icu4x) formatting in transitively.
 [day-mock](https://github.com/daybrite/day/tree/main/crates/day-mock) is a dev-dependency, for
 the host tests. The charting itself (marks, scales, ticks, projection, drawing) is this crate's

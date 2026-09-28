@@ -490,11 +490,8 @@ fn tick_summary(n: usize) -> String {
     )
 }
 
-/// Whole numbers without a trailing `.0`; anything else to one place.
+/// Whole numbers without a trailing `.0`; anything else to one place, in the locale's own digits
+/// and separators.
 fn number(v: f64) -> String {
-    if v.fract() == 0.0 {
-        format!("{}", v as i64)
-    } else {
-        format!("{v:.1}")
-    }
+    day::format_decimal(v, if v.fract() == 0.0 { 0 } else { 1 })
 }

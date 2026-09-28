@@ -187,7 +187,7 @@ fn count(
     row((
         label(title),
         slider(value).range(range).id(id).width(160.0),
-        label(move || format!("{}", value.get().round() as usize))
+        label(move || day::format_decimal(value.get().round(), 0))
             .id(readout_id)
             .width(36.0),
     ))
@@ -734,7 +734,7 @@ fn bar_chart() -> impl Piece {
                 .map(|(month, revenue)| {
                     bar(value("Month", month), value("Revenue", revenue))
                         .corner_radius(r)
-                        .annotation(AnnotationPosition::Top, format!("{revenue:.0}"))
+                        .annotation(AnnotationPosition::Top, day::format_decimal(revenue, 0))
                 })
                 .collect()
         })
@@ -846,7 +846,7 @@ fn bar_normalized() -> impl Piece {
                 .collect()
         })
         .y_format(|d| match d {
-            Datum::Number(v) => format!("{:.0}%", v * 100.0),
+            Datum::Number(v) => day::format_percent(*v, 0),
             other => other.to_string(),
         })
         .no_grid()
@@ -1156,7 +1156,7 @@ fn heatmap_chart() -> impl Piece {
                     marks.push(
                         rect(value("Hour", *hour), value("Day", *day))
                             .foreground(fill)
-                            .annotation(AnnotationPosition::Overlay, format!("{visits:.0}"))
+                            .annotation(AnnotationPosition::Overlay, day::format_decimal(*visits, 0))
                             .annotation_color(if !light {
                                 Color::WHITE
                             } else {

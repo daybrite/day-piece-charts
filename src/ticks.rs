@@ -514,30 +514,65 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
     out
 }
 
-const MONTH_NAMES: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/// Label an instant at a precision the axis's own span justifies: a clock time when the axis spans
-/// hours, a date when it spans months, a bare year when it spans decades. Showing the full
-/// timestamp at every tick is what makes a time axis unreadable.
-pub fn time_label(t: f64, span: f64) -> String {
-    let days = (t / DAY).floor() as i64;
-    let (y, m, d) = civil::from_days(days);
-    let secs_of_day = t - days as f64 * DAY;
-    let hh = (secs_of_day / HOUR).floor() as i64;
-    let mm = ((secs_of_day - hh as f64 * HOUR) / MINUTE).floor() as i64;
-    let ss = (secs_of_day - hh as f64 * HOUR - mm as f64 * MINUTE).round() as i64;
-    let mon = MONTH_NAMES[(m as usize - 1).min(11)];
+/// Which parts of an instant a time axis shows, from the span it covers: a clock time when the
+/// axis spans hours, a date when it spans months, a bare year when it spans decades. Showing the
+/// full timestamp at every tick is what makes a time axis unreadable.
+fn time_fields(span: f64) -> day_l10n::DateFields {
+    use day_l10n::DateFields::*;
     if span < 2.0 * MINUTE {
-        format!("{hh:02}:{mm:02}:{ss:02}")
+        HourMinuteSecond
     } else if span < 2.0 * DAY {
-        format!("{hh:02}:{mm:02}")
+        HourMinute
     } else if span < 200.0 * DAY {
-        format!("{mon} {d}")
+        MonthDay
     } else if span < 4.0 * 365.0 * DAY {
-        format!("{mon} {y}")
+        YearMonth
     } else {
-        format!("{y}")
+        Year
+    }
+}
+
+/// Label an instant at the precision the axis's span justifies ([`time_fields`]), written the
+/// current locale's way (`day_l10n::format_date`): `Mar 5` in English, `5 mars` in French,
+/// `3:30 PM` against `15:30`. A tracked read, so the axis relabels itself when the locale
+/// switches.
+pub fn time_label(t: f64, span: f64) -> String {
+    day_l10n::format_date(t, time_fields(span))
+}
+
+/// [`time_label`] in a named locale (untracked).
+pub fn time_label_in(locale: &str, t: f64, span: f64) -> String {
+    day_l10n::format_date_in(locale, t, time_fields(span))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2026-03-05T15:30:15Z.
+    const T: f64 = 1_772_724_615.0;
+
+    /// With CLDR's no-break spaces folded to plain ones.
+    fn label(locale: &str, span: f64) -> String {
+        time_label_in(locale, T, span).replace(['\u{a0}', '\u{202f}'], " ")
+    }
+
+    #[test]
+    fn a_time_axis_writes_dates_the_locales_way_at_its_spans_precision() {
+        let (hours, weeks, year, decade) = (6.0 * HOUR, 8.0 * 7.0 * DAY, 365.0 * DAY, 3650.0 * DAY);
+        assert_eq!(label("en", 30.0), "3:30:15 PM");
+        assert_eq!(label("en", hours), "3:30 PM");
+        assert_eq!(label("en", weeks), "Mar 5");
+        assert_eq!(label("en", year), "Mar 2026");
+        assert_eq!(label("en", decade), "2026");
+
+        assert_eq!(label("fr", 30.0), "15:30:15");
+        assert_eq!(label("fr", hours), "15:30");
+        assert_eq!(label("fr", weeks), "5 mars");
+        assert_eq!(label("fr", year), "mars 2026");
+        assert_eq!(label("fr", decade), "2026");
+
+        assert_eq!(label("de", weeks), "05.03.");
+        assert_eq!(label("ja", year), "2026/03");
     }
 }
