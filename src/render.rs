@@ -12,7 +12,8 @@ use day_geometry::Affine;
 use day_pieces::{Draw, PathBuilder, TextStyle};
 use day_spec::props::TextAlign;
 use day_spec::{
-    Color, FillRule, LinearGradient, Paint, Point, Rect, Shape, StrokeStyle, TextAnchor, TextVAlign,
+    Color, CornerRadii, FillRule, LinearGradient, Paint, Point, Rect, Shape, StrokeStyle,
+    TextAnchor, TextVAlign,
 };
 
 use crate::axis::{AxisPosition, AxisSpec};
@@ -507,12 +508,15 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         return;
     }
     let Some(cx) = center_x(p, r) else { return };
-    // Which of the rectangle's two horizontal edges get a corner radius. A heat-map cell and an
-    // unstacked bar keep both; a stacked segment keeps only the edges at the ends of its stack.
-    let mut round = (true, true);
+    // Which edges are rounded, as (top, bottom, left, right). Only the end a bar grew to is
+    // rounded: the edge standing on the axis, and the edge a stacked segment shares with the one
+    // below it, stay square, so a bar reads as rising from its baseline and a stack as one bar.
+    // A range with no baseline (a candle's body, a Gantt bar) rounds both of its ends, and a
+    // heat-map cell all four corners.
+    let mut round = (true, true, true, true);
     let (top, bottom) = if r.y.kind.is_discrete() {
-        // A categorical y (a heat map's rows): the cell is centered on its band, as tall as the
-        // band less the mark's height dimension.
+        // A categorical y (a heat map's rows, a horizontal bar's category): the mark is centered
+        // on its band, as tall as the band less the mark's height dimension.
         let Some((cy, h)) = p.y_band else { return };
         (cy - h / 2.0, cy + h / 2.0)
     } else {
@@ -526,20 +530,38 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         // it projects to an enormous negative and the bar runs off the pane. Clamping puts the
         // baseline on the axis floor, which is what a bar on a log scale means.
         let (y0, y1) = (r.y.clamp_to_range(y0), r.y.clamp_to_range(y1));
-        // Which stack end landed on which device edge: the value axis can be inverted, so this is
-        // read off the projection rather than assumed.
-        if (y1 < y0) == (p.v1 > p.v0) {
-            round = (p.stack_hi, p.stack_lo);
+        let (start, end) = if p.mark.y_end.is_some() {
+            // An explicit range: rounded at both ends, unless it starts on the baseline.
+            (p.v0 != 0.0, true)
         } else {
-            round = (p.stack_lo, p.stack_hi);
-        }
+            // From the baseline, or stacked on the segment below: the value end is rounded when
+            // it is the outer end of its whole stack, which for a loss is the lowest segment.
+            (false, if p.v1 >= p.v0 { p.stack_hi } else { p.stack_lo })
+        };
+        // Which end landed on which device edge: the value axis can be inverted, so this is read
+        // off the projection rather than assumed.
+        round = if y1 < y0 {
+            (end, start, true, true)
+        } else {
+            (start, end, true, true)
+        };
         (y0.min(y1), y0.max(y1))
     };
-    // An explicit x span (a histogram bin, a Gantt bar) is the rectangle's edges; without one
-    // the mark is centered on its position and as wide as its band.
+    // An explicit x span (a histogram bin, a horizontal bar, a Gantt bar) is the rectangle's
+    // edges; without one the mark is centered on its position and as wide as its band.
     let (left, right) = match (&p.mark.x, &p.mark.x_end) {
         (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
-            (Some(a), Some(b)) => (a.min(b), a.max(b)),
+            (Some(xa), Some(xb)) => {
+                if r.y.kind.is_discrete() {
+                    // A horizontal bar grows along x from its start: square on the axis when it
+                    // starts at zero, rounded at both ends when it floats (a Gantt bar).
+                    let starts_on_axis = a.datum.as_continuous() == Some(0.0);
+                    let (start, end) = (!starts_on_axis, true);
+                    let (left_end, right_end) = if xb >= xa { (start, end) } else { (end, start) };
+                    round = (true, true, left_end, right_end);
+                }
+                (xa.min(xb), xa.max(xb))
+            }
             _ => return,
         },
         _ => {
@@ -554,48 +576,19 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         (bottom - top).max(0.0),
     );
     let paint = fill_paint(p, color_of(p, r, paint));
-    let radius = p
-        .mark
-        .style
-        .corner_radius
-        // A radius wider than half the bar is not a rounded bar, it is a lozenge; clamp so a
-        // generous radius degrades instead of inverting the shape.
-        .min(rect.size.width / 2.0)
-        .min(rect.size.height / 2.0);
-    d.fill(rounded_rect(rect, radius, round.0, round.1), paint);
-}
-
-/// A rectangle rounded on only the edges the caller asks for.
-///
-/// Rounding every segment of a stack turns its middles into lozenges and opens gaps between the
-/// colors; rounding only the two ends lets the column read as one bar (README "What it does
-/// carefully"). `Shape::RoundedRect` rounds all four corners, so the mixed case is a path, and
-/// `arc_to` spells each corner as one quarter turn, with a zero radius degenerating to a plain
-/// line into the square corner, which is what makes all four combinations one expression.
-fn rounded_rect(rect: Rect, radius: f64, top: bool, bottom: bool) -> Shape {
-    if radius <= 0.0 || rect.size.width <= 0.0 || rect.size.height <= 0.0 {
-        return Shape::Rect(rect);
-    }
-    if top && bottom {
-        return Shape::RoundedRect(rect, radius);
-    }
-    if !top && !bottom {
-        return Shape::Rect(rect);
-    }
-    let (x0, y0) = (rect.origin.x, rect.origin.y);
-    let (x1, y1) = (x0 + rect.size.width, y0 + rect.size.height);
-    let (rt, rb) = (
-        if top { radius } else { 0.0 },
-        if bottom { radius } else { 0.0 },
-    );
-    // Clockwise on screen, which is the direction `arc_to`'s degrees run in device space.
-    PathBuilder::new()
-        .arc_to(Point::new(x0 + rt, y0 + rt), rt, 180.0, 90.0)
-        .arc_to(Point::new(x1 - rt, y0 + rt), rt, 270.0, 90.0)
-        .arc_to(Point::new(x1 - rb, y1 - rb), rb, 0.0, 90.0)
-        .arc_to(Point::new(x0 + rb, y1 - rb), rb, 90.0, 90.0)
-        .close()
-        .build()
+    let radius = p.mark.style.corner_radius;
+    // A corner is rounded when both edges meeting at it are.
+    let (t, b, l, rt) = round;
+    let at = |yes: bool| if yes { radius } else { 0.0 };
+    let radii = CornerRadii {
+        top_left: at(t && l),
+        top_right: at(t && rt),
+        bottom_right: at(b && rt),
+        bottom_left: at(b && l),
+    };
+    // Fitted by `rounded_rect`: a radius wider than the bar degrades to a rounded end rather than
+    // inverting the shape.
+    d.fill(Shape::rounded_rect(rect, radii), paint);
 }
 
 fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
@@ -1466,5 +1459,174 @@ mod inset_tests {
         assert!((w.inner - 4.0).abs() < 1e-9, "{}", w.inner);
         let inn = w.inner_span;
         assert!((inn.0 - FRAC_PI_2).abs() < 1e-9, "{inn:?}");
+    }
+}
+
+#[cfg(test)]
+mod corner_tests {
+    //! Bars round only the end they grew to (README "What it does carefully").
+
+    use super::*;
+    use crate::data::value;
+    use crate::mark::{Mark, Stacking, bar, rect};
+    use crate::resolve::{Config, resolve};
+    use crate::scale::ScaleSpec;
+    use day_spec::{DrawOp, PathSeg, Size};
+
+    const MARKED: Color = Color {
+        r: 1.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    /// Draw `marks` and return the shapes filled in `color`.
+    fn filled(marks: Vec<Mark>, color: Color) -> Vec<Shape> {
+        let (xs, ys) = (ScaleSpec::default(), ScaleSpec::default());
+        let (xa, ya) = (AxisSpec::default(), AxisSpec::default());
+        let colors = |i: usize, _: &str| crate::style::categorical(i);
+        let cfg = Config {
+            x_scale: &xs,
+            y_scale: &ys,
+            x_axis: &xa,
+            y_axis: &ya,
+            coordinate: crate::coord::Coordinate::Cartesian,
+            series_colors: &colors,
+            label_size: 11.0,
+            font: Default::default(),
+            legend_insets: Default::default(),
+            plot_insets: Some(Default::default()),
+        };
+        let resolved = resolve(marks, Size::new(400.0, 300.0), &cfg);
+        let chrome = Chrome::for_dark(false);
+        let paint = Paint2 {
+            chrome: &chrome,
+            label_size: 11.0,
+            font: Default::default(),
+            x_axis: &xa,
+            y_axis: &ya,
+            series_colors: &colors,
+        };
+        let mut d = Draw::new();
+        draw(&mut d, &resolved, &paint);
+        d.ops()
+            .iter()
+            .filter_map(|op| match op {
+                DrawOp::Fill(shape, Paint::Solid(c)) if *c == color => Some(shape.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Which corners of a filled rectangle are rounded: top left, top right, bottom right,
+    /// bottom left.
+    fn rounded(shape: &Shape) -> [bool; 4] {
+        match shape {
+            Shape::Rect(_) => [false; 4],
+            Shape::RoundedRect(_, r) => [*r > 0.0; 4],
+            Shape::Path(p) => {
+                let b = p.bounds();
+                let (x0, y0) = (b.origin.x, b.origin.y);
+                let (x1, y1) = (x0 + b.size.width, y0 + b.size.height);
+                let pts: Vec<Point> = p
+                    .segs
+                    .iter()
+                    .filter_map(|s| match s {
+                        PathSeg::Move(q) | PathSeg::Line(q) | PathSeg::Cubic(_, _, q) => Some(*q),
+                        _ => None,
+                    })
+                    .collect();
+                let sharp = |x: f64, y: f64| {
+                    pts.iter()
+                        .any(|q| (q.x - x).abs() < 1e-9 && (q.y - y).abs() < 1e-9)
+                };
+                [
+                    !sharp(x0, y0),
+                    !sharp(x1, y0),
+                    !sharp(x1, y1),
+                    !sharp(x0, y1),
+                ]
+            }
+            other => panic!("not a rectangle: {other:?}"),
+        }
+    }
+
+    fn one(marks: Vec<Mark>) -> [bool; 4] {
+        let shapes = filled(marks, MARKED);
+        assert_eq!(shapes.len(), 1, "{shapes:?}");
+        rounded(&shapes[0])
+    }
+
+    #[test]
+    fn a_bar_is_rounded_on_top_and_square_on_its_axis() {
+        let got = one(vec![
+            bar(value("Month", "Jan"), value("Revenue", 10.0))
+                .corner_radius(4.0)
+                .foreground(MARKED),
+        ]);
+        assert_eq!(got, [true, true, false, false]);
+    }
+
+    #[test]
+    fn a_loss_hangs_from_its_axis_rounded_at_the_bottom() {
+        let got = one(vec![
+            bar(value("Month", "Jan"), value("Revenue", 10.0)),
+            bar(value("Month", "Feb"), value("Revenue", -10.0))
+                .corner_radius(4.0)
+                .foreground(MARKED),
+        ]);
+        assert_eq!(got, [false, false, true, true]);
+    }
+
+    #[test]
+    fn a_stack_is_rounded_only_at_its_outer_end() {
+        let (bottom, top) = (MARKED, Color::rgb(0.0, 1.0, 1.0));
+        let marks = vec![
+            bar(value("Month", "Jan"), value("Revenue", 10.0))
+                .by_series(value("Region", "North"))
+                .corner_radius(4.0)
+                .foreground(bottom),
+            bar(value("Month", "Jan"), value("Revenue", 6.0))
+                .by_series(value("Region", "South"))
+                .corner_radius(4.0)
+                .foreground(top),
+        ];
+        let lower = filled(marks.clone(), bottom);
+        let upper = filled(marks, top);
+        assert_eq!(rounded(&lower[0]), [false; 4], "the segment on the axis");
+        assert_eq!(
+            rounded(&upper[0]),
+            [true, true, false, false],
+            "the stack's top"
+        );
+    }
+
+    #[test]
+    fn a_horizontal_bar_is_rounded_at_its_far_end() {
+        let got = one(vec![
+            bar(value("Share", 5.0), value("Language", "Rust"))
+                .x_range(value("Share", 0.0), value("Share", 5.0))
+                .corner_radius(4.0)
+                .foreground(MARKED),
+        ]);
+        assert_eq!(got, [false, true, true, false]);
+    }
+
+    #[test]
+    fn a_floating_range_and_a_heat_map_cell_keep_every_corner() {
+        let range = one(vec![
+            bar(value("Day", "Mon"), value("Price", 3.0))
+                .y_range(value("Price", 3.0), value("Price", 8.0))
+                .stacking(Stacking::Unstacked)
+                .corner_radius(4.0)
+                .foreground(MARKED),
+        ]);
+        assert_eq!(range, [true; 4]);
+        let cell = one(vec![
+            rect(value("Hour", "09"), value("Day", "Mon"))
+                .corner_radius(4.0)
+                .foreground(MARKED),
+        ]);
+        assert_eq!(cell, [true; 4]);
     }
 }
