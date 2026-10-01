@@ -89,7 +89,7 @@ jobs:
     secrets: inherit
     with:
       project-path: demo
-      targets: macos-appkit, linux-gtk, linux-qt, windows-xaml, ios-uikit, android-mdc,
+      targets: macos-appkit, linux-gtk, linux-qt, windows-winui, ios-uikit, android-mdc,
         harmony-arkui, web-dom
       update-day-deps: true
       scripts: dayscript/charts.yaml dayscript/gallery.yaml

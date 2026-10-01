@@ -9,7 +9,7 @@ build = 1
 targets = [
     "macos-appkit", "macos-gtk", "macos-qt",
     "linux-gtk", "linux-qt",
-    "windows-xaml", "windows-gtk", "windows-qt",
+    "windows-winui", "windows-xaml", "windows-gtk", "windows-qt",
     "ios-uikit", "android-mdc", "harmony-arkui",
     "web-dom",
 ]
