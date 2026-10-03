@@ -57,11 +57,14 @@ pub mod axis;
 pub mod coord;
 pub mod data;
 pub mod layout;
+pub mod legend;
 pub mod mark;
 pub mod render;
 pub mod resolve;
 pub mod scale;
 pub mod select;
+pub use legend::{Legend, LegendEntry, legend};
+pub use select::{Guides, Selection, Snap};
 pub mod style;
 pub mod ticks;
 
@@ -120,6 +123,7 @@ pub struct Chart {
     guides: select::Guides,
     transition: Option<AnimSpec>,
     appear: bool,
+    highlight_series: Option<Signal<Option<String>>>,
 }
 
 /// The transition [`Chart::animated`] uses: a spring that settles in about half a second with a
@@ -163,10 +167,18 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         guides: select::Guides::NONE,
         transition: None,
         appear: false,
+        highlight_series: None,
     }
 }
 
 impl Chart {
+    /// Emphasize a stable series key shared with an interactive legend. Other series recede;
+    /// the signal does not mutate data, restart transitions, or affect scale / hit geometry.
+    pub fn highlight_series(mut self, signal: Signal<Option<String>>) -> Self {
+        self.highlight_series = Some(signal);
+        self
+    }
+
     // --- Scales (Swift Charts' .chartXScale / .chartYScale) ---
 
     /// Pin the x domain.
@@ -703,6 +715,7 @@ impl Piece for Chart {
             guides,
             transition,
             appear,
+            highlight_series,
         } = self;
 
         // The transition in flight, if any (README "Animation"). The draw closure starts one when
@@ -815,7 +828,21 @@ impl Piece for Chart {
                 y_axis: &y_axis,
                 series_colors: &*colors,
             };
-            render::draw(d, &resolved, &paint);
+            let emphasized = highlight_series
+                .and_then(|signal| signal.get())
+                .and_then(|key| {
+                    if !resolved.series.contains(&key) {
+                        return None;
+                    }
+                    let mut emphasized = resolved.clone();
+                    for mark in &mut emphasized.marks {
+                        if emphasized.series.get(mark.series_index) != Some(&key) {
+                            mark.mark.style.opacity *= 0.22;
+                        }
+                    }
+                    Some(emphasized)
+                });
+            render::draw(d, emphasized.as_ref().unwrap_or(&resolved), &paint);
             if let Some(lb) = lb {
                 draw_legend(d, &series, &lb, resolved.plot, label_size, &font, ch.label);
             }

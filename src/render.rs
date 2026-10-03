@@ -321,7 +321,7 @@ fn grid(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
 fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let plot = r.plot;
     // One measurement for the whole axis: these are font metrics, the same for every label, so
-    // nothing below measures per tick (docs/fonts.md).
+    // vertical labels reuse these metrics; horizontal collision checks measure their widths.
     let m = day_core::measure_text("0", paint.label_size, &paint.font);
     let line_h = m.height;
     // How far a tick label's line box must shift up so its cap box straddles the gridline instead.
@@ -362,6 +362,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 1.0,
             );
         }
+        let mut occupied = Vec::new();
         for t in &r.x_ticks {
             let x = t.at.or_else(|| r.x.project(&Datum::Number(t.value)));
             let Some(x) = x else { continue };
@@ -375,7 +376,15 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                     1.0,
                 );
             }
-            if paint.x_axis.labels {
+            if paint.x_axis.labels
+                && !t.label.is_empty()
+                && reserve_label(
+                    &mut occupied,
+                    x,
+                    day_core::measure_text(&t.label, paint.label_size, &paint.font).width,
+                    4.0,
+                )
+            {
                 d.text(
                     &t.label,
                     Point::new(x, y + 6.0 * away),
@@ -431,6 +440,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                 1.0,
             );
         }
+        let mut occupied = Vec::new();
         for t in &r.y_ticks {
             let y = t.at.or_else(|| r.y.project(&Datum::Number(t.value)));
             let Some(y) = y else { continue };
@@ -444,7 +454,10 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
                     1.0,
                 );
             }
-            if paint.y_axis.labels {
+            if paint.y_axis.labels
+                && !t.label.is_empty()
+                && reserve_label(&mut occupied, y, line_h, 2.0)
+            {
                 // Aligned against the axis and centered on the tick. The anchor says that
                 // outright, so nothing here has to measure the label first; the backend already
                 // holds the width it is about to draw with (docs/canvas.md "Text"). The lift is
@@ -484,6 +497,19 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             );
         }
     }
+}
+
+// Keep categorical and explicitly pinned axes legible as their viewport shrinks. Marks and
+// gridlines retain every category; only colliding labels are omitted. Symmetric intervals
+// work with reversed axes, RTL placement and caller-supplied ticks in any order.
+fn reserve_label(occupied: &mut Vec<(f64, f64)>, center: f64, extent: f64, gap: f64) -> bool {
+    let start = center - extent / 2.0 - gap / 2.0;
+    let end = center + extent / 2.0 + gap / 2.0;
+    if occupied.iter().any(|&(a, b)| start < b && end > a) {
+        return false;
+    }
+    occupied.push((start, end));
+    true
 }
 
 fn widest(ticks: &[crate::ticks::Tick], paint: &Paint2<'_>) -> f64 {
@@ -1215,15 +1241,59 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
         .marks
         .iter()
         .filter_map(|p| {
-            let x = center_x(p, r)?;
-            let y = r.y.project(&Datum::Number(p.v1))?;
+            let horizontal = p.y_band.is_some() && p.mark.x_end.is_some();
+            let x = if horizontal {
+                r.x.project(&p.mark.x_end.as_ref()?.datum)?
+            } else {
+                center_x(p, r)?
+            };
+            let y = if let Some((start, end)) = p.y_band {
+                (start + end) * 0.5
+            } else {
+                r.y.project(&Datum::Number(p.v1))?
+            };
+            let (position, label, measured) = if horizontal {
+                (
+                    p.mark
+                        .y
+                        .as_ref()
+                        .and_then(|v| match &v.datum {
+                            Datum::Category(c) => Some(c.clone()),
+                            _ => None,
+                        })
+                        .unwrap_or_default(),
+                    crate::resolve::label_for(
+                        p.mark.x_end.as_ref()?.datum.as_continuous()?,
+                        &r.x,
+                        paint.x_axis,
+                        x_step,
+                    ),
+                    p.mark.x_end.as_ref()?.datum.as_continuous()?,
+                )
+            } else {
+                (
+                    x_label_of(p, r, paint, x_step),
+                    crate::resolve::label_for(p.v1, &r.y, paint.y_axis, y_step),
+                    p.v1,
+                )
+            };
             let series = r.series.get(p.series_index).cloned().unwrap_or_default();
             Some(crate::select::HitMark {
                 at: device(r, x + p.mark.offset.0, y + p.mark.offset.1, polar),
                 color: color_of(p, r, paint),
-                x_label: x_label_of(p, r, paint, x_step),
-                y_label: crate::resolve::label_for(p.v1, &r.y, paint.y_axis, y_step),
-                value: p.v1,
+                x_label: position,
+                y_label: p
+                    .mark
+                    .selection_value
+                    .as_ref()
+                    .map(|v| v.label.clone())
+                    .unwrap_or(label),
+                value: p
+                    .mark
+                    .selection_value
+                    .as_ref()
+                    .and_then(|v| v.datum.as_continuous())
+                    .unwrap_or(measured),
                 series,
             })
         })
@@ -1628,5 +1698,38 @@ mod corner_tests {
                 .foreground(MARKED),
         ]);
         assert_eq!(cell, [true; 4]);
+    }
+}
+
+#[cfg(test)]
+mod label_collision_tests {
+    use super::reserve_label;
+
+    #[test]
+    fn dense_ticks_leave_separated_labels_in_both_axis_directions() {
+        for direction in [-1.0, 1.0] {
+            let mut occupied = Vec::new();
+            let accepted = (0..7)
+                .filter(|i| {
+                    reserve_label(&mut occupied, direction * f64::from(*i) * 10.0, 16.0, 4.0)
+                })
+                .count();
+            assert_eq!(accepted, 4);
+            for (i, &(a, b)) in occupied.iter().enumerate() {
+                for &(c, d) in &occupied[i + 1..] {
+                    assert!(b <= c || d <= a);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn out_of_order_ticks_do_not_overlap_an_earlier_label() {
+        let mut occupied = Vec::new();
+        assert!(reserve_label(&mut occupied, 0.0, 20.0, 4.0));
+        assert!(reserve_label(&mut occupied, 100.0, 20.0, 4.0));
+        assert!(!reserve_label(&mut occupied, 10.0, 20.0, 4.0));
+        assert!(reserve_label(&mut occupied, 50.0, 20.0, 4.0));
+        assert_eq!(occupied.len(), 3);
     }
 }

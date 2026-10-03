@@ -229,6 +229,8 @@ pub struct Mark {
     pub height: Dimension,
     pub stacking: Stacking,
     pub annotation: Option<Annotation>,
+    /// An additional measured value for interactive annotations, e.g. a heatmap cell count.
+    pub selection_value: Option<Value>,
     /// Points added to the mark's position after projection, for nudging overlapping marks apart.
     pub offset: (f64, f64),
     /// Draw order. Marks sort by this before rendering; equal z keeps declaration order.
@@ -268,6 +270,7 @@ impl Mark {
                 _ => Stacking::Unstacked,
             },
             annotation: None,
+            selection_value: None,
             offset: (0.0, 0.0),
             z: 0.0,
             inner_radius: 0.0,
@@ -403,6 +406,12 @@ impl Mark {
     }
     pub fn z_index(mut self, z: f64) -> Self {
         self.z = z;
+        self
+    }
+    /// Supply a measured value when position alone does not describe a mark. Its label is
+    /// application-formatted display text; its numeric datum is available in the selection.
+    pub fn selection_value(mut self, value: Value) -> Self {
+        self.selection_value = Some(value);
         self
     }
     pub fn annotation(mut self, position: AnnotationPosition, text: impl Into<String>) -> Self {

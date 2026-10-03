@@ -736,3 +736,65 @@ fn a_line_chart_is_not_zero_based() {
         r.y.domain
     );
 }
+
+#[test]
+fn categorical_cells_and_horizontal_bars_supply_interactive_values() {
+    use day_spec::{Point, Size};
+    let scale = ScaleSpec::default();
+    let axis = AxisSpec::default();
+    let colors = |i: usize, _: &str| categorical(i);
+    let config = resolve::Config {
+        x_scale: &scale,
+        y_scale: &scale,
+        x_axis: &axis,
+        y_axis: &axis,
+        coordinate: Coordinate::Cartesian,
+        series_colors: &colors,
+        label_size: 11.0,
+        font: Default::default(),
+        legend_insets: Default::default(),
+        plot_insets: None,
+    };
+    let chrome = Chrome::for_dark(false);
+    let paint = render::Paint2 {
+        chrome: &chrome,
+        label_size: 11.0,
+        font: Default::default(),
+        x_axis: &axis,
+        y_axis: &axis,
+        series_colors: &colors,
+    };
+    let cells = resolve::resolve(
+        vec![
+            rect(value("", "Monday fixture"), value("", "Morning fixture"))
+                .selection_value(value("Morning fixture · 7", 7)),
+        ],
+        Size::new(400.0, 300.0),
+        &config,
+    );
+    let hits = render::hit_model(&cells, &paint);
+    assert_eq!(hits.marks.len(), 1);
+    let selected = hits.resolve(hits.marks[0].at, Snap::NearestMark).unwrap();
+    assert_eq!(selected.x_label, "Monday fixture");
+    assert_eq!(selected.values[0].label, "Morning fixture · 7");
+    assert_eq!(selected.values[0].value, 7.0);
+    let bars = resolve::resolve(
+        vec![bar(value("", 7), value("", "Short fixture")).x_range(value("", 0), value("", 7))],
+        Size::new(400.0, 300.0),
+        &config,
+    );
+    let hits = render::hit_model(&bars, &paint);
+    assert_eq!(hits.marks.len(), 1);
+    let selected = hits
+        .resolve(
+            Point::new(bars.plot.origin.x + 1.0, hits.marks[0].at.y),
+            Snap::NearestY,
+        )
+        .unwrap();
+    assert_eq!(selected.x_label, "Short fixture");
+    assert_eq!(selected.values[0].value, 7.0);
+    assert!(
+        hits.resolve(Point::new(-1.0, -1.0), Snap::NearestY)
+            .is_none()
+    );
+}

@@ -1084,3 +1084,23 @@ Run `cargo test` for the grammar, geometry, and rendering-model checks. From `de
 and `-p android-mdc` run the same scripts on those targets. Both check the values a
 chart derives and capture screenshots. Read the screenshots as well as the log: canvas
 text is drawn content, so no assertion can reach the labels inside a plot.
+
+Axis labels are thinned by their measured bounds when a viewport is too small to
+show every categorical or explicitly pinned tick. Marks and gridlines retain the
+full data; label collision checks also respect reversed and RTL axes.
+
+### Interactive legends and measured annotations
+
+`legend(|| Vec<LegendEntry>)` builds native legend rows. Give an entry a stable series key,
+its display label and color, optional `.detail(localized_text)` and `.link(target)`.
+Links use Day's registered route/URL handling by default; `.on_link(|target| ...)` registers
+an application handler. Linked rows use a pointer cursor and highlight on hover. Share a
+`Signal<Option<String>>` through `Legend::highlight` and `Chart::highlight_series` to emphasize
+the matching series without changing its geometry or restarting its animation.
+
+Use `.select(selection).snap(Snap::NearestY).guides(Guides::CROSSHAIR)` for horizontal bars;
+selection identifies the category and its range endpoint anywhere along that row. Categorical
+heatmap cells support `Snap::NearestMark`; `.selection_value(value(localized_annotation, count))`
+adds an explicit measured value when their two position channels alone cannot express it.
+The selection exposes both the formatted label and numeric value. Existing nearest-x guides
+work well for publication timelines. Hover, tap and drag all use the last drawn hit model.

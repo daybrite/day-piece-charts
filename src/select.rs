@@ -50,6 +50,8 @@ pub enum Snap {
     /// The single nearest mark in both axes, what a scatter wants, where two points sharing an x
     /// are unrelated.
     NearestMark,
+    /// Select a horizontal bar anywhere along its category row.
+    NearestY,
 }
 
 /// Which guides the chart draws for the current selection.
@@ -132,6 +134,17 @@ impl HitModel {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })?;
                 (dist2(hit.at, p) <= REACH * REACH).then(|| Selection {
+                    at: hit.at,
+                    x_label: hit.x_label.clone(),
+                    values: vec![value_of(hit)],
+                })
+            }
+            Snap::NearestY => {
+                let hit = self
+                    .marks
+                    .iter()
+                    .min_by(|a, b| (a.at.y - p.y).abs().total_cmp(&(b.at.y - p.y).abs()))?;
+                Some(Selection {
                     at: hit.at,
                     x_label: hit.x_label.clone(),
                     values: vec![value_of(hit)],
