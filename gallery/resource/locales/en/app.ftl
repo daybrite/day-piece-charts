@@ -91,3 +91,42 @@ ex_dist_fan = Fan
 
 # The picker above the pages when an app shows them as one page (`gallery()`).
 gallery_page = Chart
+
+# Declarative interaction examples
+inter_linked = Linked point selections
+inter_brush = Brushing and cross-filtering
+inter_overview = Overview and detail
+inter_legend = Shared legend selections
+inter_cells = Interactive heatmap
+inter_viewport = Pan and zoom
+inter_compose = Composing selection predicates
+inter_links = Registered chart links
+inter_linked_note = Click a point in either view. Shift-click to add or remove points; identity links the two encodings.
+inter_brush_note = Drag a rectangle to select observations. The summary counts only those observations. Drag inside the brush to move it. Click or tap outside the selected area to clear it.
+inter_overview_note = Drag a horizontal range in the overview. The detail view uses that range as its scale domain. Click or tap outside the selected area to clear it.
+inter_legend_note = Click wedges, points or either legend to toggle groups. The same parameter coordinates all views.
+inter_cells_note = Hover, tap or scrub across cells to inspect their data. The selected cell stays bright while others recede.
+inter_viewport_note = Drag to pan, use a trackpad or touch pinch to zoom, or use the zoom buttons. Reset restores the original domains.
+inter_compose_note = Brush the top view and select groups in the legend. The top view shows their intersection; the bottom shows their union. Click or tap outside the selected area to clear it.
+inter_links_note = Click a wedge or legend link. Both use the same registered handler, which reports the route below.
+inter_reset = Reset selection
+inter_zoom_in = Zoom in
+inter_zoom_out = Zoom out
+inter_group_a = Group A
+inter_group_b = Group B
+inter_group_c = Group C
+inter_x = Measurement X
+inter_y = Measurement Y
+inter_count_axis = Observations
+inter_count = { NUMBER($count, maximumFractionDigits: 0) } selected observations
+inter_band = Band { NUMBER($band, maximumFractionDigits: 0) }
+inter_cell = Band { NUMBER($band, maximumFractionDigits: 0) } · { NUMBER($count, maximumFractionDigits: 0) } observations
+inter_link_target = Activated route: { $target }
+
+inter_select_sample = Select one observation
+
+inter_filtered = Linked data filtering
+inter_inputs = Input-bound selections
+inter_filtered_note = Brush the top view. The bottom view filters its data through the same query while preserving the original axes. Click or tap outside the selected area to clear it.
+inter_inputs_note = Choose a group in the picker, chart or legend. A field-projected query keeps all three controls synchronized.
+inter_all_groups = All groups

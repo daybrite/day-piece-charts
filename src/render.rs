@@ -1241,14 +1241,78 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
         .marks
         .iter()
         .filter_map(|p| {
+            if p.mark.kind == MarkKind::Sector
+                || polar && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle)
+            {
+                let total: f64 = r
+                    .marks
+                    .iter()
+                    .filter(|q| q.mark.kind == p.mark.kind)
+                    .map(|q| (q.v1 - q.v0).abs())
+                    .sum();
+                if total <= 0.0 {
+                    return None;
+                }
+                let coord = if polar {
+                    r.coordinate
+                } else {
+                    Coordinate::polar()
+                };
+                let center = coord.center(r.plot);
+                let radius = coord.radius(r.plot);
+                let hole = match coord {
+                    Coordinate::Polar { hole, .. } => hole,
+                    _ => 0.0,
+                };
+                let outer = radius * p.mark.outer_radius;
+                let inner = (radius * hole).max(radius * p.mark.inner_radius);
+                let start = coord.angle(p.v0 / total);
+                let end = coord.angle(p.v1 / total);
+                let w = inset_wedge(p.mark.angular_inset, start, end, inner, outer)?;
+                let mid = (start + end) * 0.5;
+                let rr = (outer + w.inner) * 0.5;
+                let at = Point::new(center.x + rr * mid.cos(), center.y + rr * mid.sin());
+                let number = p.mark.y.as_ref()?.datum.as_continuous()?;
+                return Some(crate::select::HitMark {
+                    legend: false,
+                    record: crate::interaction::Record::from_mark(&p.mark),
+                    link: p.mark.link.clone(),
+                    region: crate::select::HitRegion::Sector {
+                        center,
+                        inner: w.inner,
+                        outer,
+                        start,
+                        end,
+                        gap: p.mark.angular_inset.clamp(0.0, outer * MAX_INSET_FRACTION),
+                    },
+                    at,
+                    color: color_of(p, r, paint),
+                    series: r.series.get(p.series_index).cloned().unwrap_or_default(),
+                    x_label: p
+                        .mark
+                        .series
+                        .as_ref()
+                        .map(|v| v.datum.to_string())
+                        .unwrap_or_default(),
+                    y_label: p
+                        .mark
+                        .selection_value
+                        .as_ref()
+                        .map(|v| v.label.clone())
+                        .unwrap_or_else(|| {
+                            crate::resolve::label_for(number, &r.y, paint.y_axis, y_step)
+                        }),
+                    value: number,
+                });
+            }
             let horizontal = p.y_band.is_some() && p.mark.x_end.is_some();
             let x = if horizontal {
                 r.x.project(&p.mark.x_end.as_ref()?.datum)?
             } else {
                 center_x(p, r)?
             };
-            let y = if let Some((start, end)) = p.y_band {
-                (start + end) * 0.5
+            let y = if let Some((center, _)) = p.y_band {
+                center
             } else {
                 r.y.project(&Datum::Number(p.v1))?
             };
@@ -1278,7 +1342,43 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                 )
             };
             let series = r.series.get(p.series_index).cloned().unwrap_or_default();
+            let at = device(r, x + p.mark.offset.0, y + p.mark.offset.1, polar);
+            let region = if !polar && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
+                let (left, right) = if let Some(end) = &p.mark.x_end {
+                    let a = r.x.project(&p.mark.x.as_ref()?.datum)?;
+                    let b = r.x.project(&end.datum)?;
+                    (a.min(b), a.max(b))
+                } else {
+                    let cx = center_x(p, r)?;
+                    let w = band_of(p, r);
+                    (cx - w / 2.0, cx + w / 2.0)
+                };
+                let (top, bottom) = if let Some((cy, h)) = p.y_band {
+                    (cy - h / 2.0, cy + h / 2.0)
+                } else {
+                    let a = r.y.clamp_to_range(r.y.project(&Datum::Number(p.v0))?);
+                    let b = r.y.clamp_to_range(r.y.project(&Datum::Number(p.v1))?);
+                    (a.min(b), a.max(b))
+                };
+                crate::select::HitRegion::Rect(Rect::new(
+                    left + p.mark.offset.0,
+                    top + p.mark.offset.1,
+                    right - left,
+                    bottom - top,
+                ))
+            } else {
+                crate::select::HitRegion::Point(
+                    at,
+                    (p.mark.style.symbol_size / std::f64::consts::PI)
+                        .sqrt()
+                        .max(6.0),
+                )
+            };
             Some(crate::select::HitMark {
+                legend: false,
+                record: crate::interaction::Record::from_mark(&p.mark),
+                link: p.mark.link.clone(),
+                region,
                 at: device(r, x + p.mark.offset.0, y + p.mark.offset.1, polar),
                 color: color_of(p, r, paint),
                 x_label: position,
@@ -1299,6 +1399,8 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
         })
         .collect();
     crate::select::HitModel {
+        x_scale: Some(r.x.clone()),
+        y_scale: Some(r.y.clone()),
         plot: r.plot,
         marks,
     }

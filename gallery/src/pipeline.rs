@@ -10,12 +10,12 @@
 //! itself calls. The crate's `tests/grammar.rs` asserts the same numbers on the host.
 
 use day::prelude::*;
-use day_piece_charts::select::{Guides, Selection, Snap};
 use day_piece_charts::ticks::{self, LabelFit};
 use day_piece_charts::{
     AnnotationPosition, Coordinate, Datum, Interpolation, Interval, LegendPosition, Mark, Stacking,
     bar, chart, rect, resolve, sector, sequential, value,
 };
+use day_piece_charts::{Guides, Selection, Snap};
 
 use crate::res;
 
@@ -182,9 +182,11 @@ fn cartesian(
         // Hover, tap or drag writes what is under the pointer into `selected`; the chart reads the
         // same signal back to draw a rule, a ring on each mark and a box naming their values, and
         // the readout below puts the same selection into words.
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         // The months slider and the composition picker both change what the chart draws; each
         // change animates (README "Animation"): the window widens, bars grow, lines extend.
         .animated()

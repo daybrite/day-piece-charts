@@ -532,7 +532,7 @@ fn time_fields(span: f64) -> day_l10n::DateFields {
     }
 }
 
-/// Label an instant at the precision the axis's span justifies ([`time_fields`]), written the
+/// Label an instant at the precision the axis's span justifies (`time_fields`), written the
 /// current locale's way (`day_l10n::format_date`): `Mar 5` in English, `5 mars` in French,
 /// `3:30 PM` against `15:30`. A tracked read, so the axis relabels itself when the locale
 /// switches.

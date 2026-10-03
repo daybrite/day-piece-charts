@@ -15,13 +15,13 @@
 //!   interpolate, and the scales' domains interpolate beside them, so a bar grows along the axis
 //!   that is itself rescaling, and a time series slides as its window widens.
 //! * **Stacks are re-stacked.** A stacked segment's *value* is interpolated and the stack is summed
-//!   again every frame, by the same [`stack`] the pipeline uses. Interpolating the segments' edges
+//!   again every frame, by the same `stack` the pipeline uses. Interpolating the segments' edges
 //!   instead would open gaps and overlaps mid-transition: a pie gaining a slice would show wedges
 //!   crossing one another.
 //! * **Entering and leaving mean something.** A new bar or wedge grows from its baseline and a
 //!   removed one shrinks into it; a line's new samples start on the old line and slide out along
 //!   it, and removed ones collapse onto the new line, so a series never spikes through zero. What
-//!   each kind of mark does is one row of [`motion`].
+//!   each kind of mark does is one row of `motion`.
 //! * **Bands move in device space.** A category's band moves when the set of categories changes,
 //!   and a band is not a number, so a mark on a discrete axis is carried between its old and new
 //!   slots ([`Placed::x_band`]).
@@ -51,7 +51,7 @@ use crate::ticks::Tick;
 /// How one kind of mark behaves in a transition.
 ///
 /// Every decision this module makes by mark kind is read from here, so a new kind of mark is one
-/// row in [`motion`] (the match is exhaustive: a kind without a row does not compile), and the
+/// row in `motion` (the match is exhaustive: a kind without a row does not compile), and the
 /// rest of the machinery (matching, carrying between bands, re-stacking, cross-fading) serves it
 /// as it is.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -165,7 +165,7 @@ fn continuous(v: &Option<Value>) -> bool {
 }
 
 /// A mark's identity: its [`Mark::key`] when the app named one, else what its kind is matched by
-/// ([`MatchBy`]). `traced` holds the series that draw a connected path in either chart: a point
+/// (`MatchBy`). `traced` holds the series that draw a connected path in either chart: a point
 /// on one of those is a sample on it, not a scatter point.
 pub fn identity(p: &Placed, traced: &[usize]) -> Identity {
     let m = &p.mark;
@@ -550,7 +550,7 @@ fn blend_mark(a: &Placed, ra: &Resolved, b: &Placed, rb: &Resolved, t: f64) -> P
     }
 }
 
-/// Sum every stacked mark again from its interpolated value, with the pipeline's own [`stack`].
+/// Sum every stacked mark again from its interpolated value, with the pipeline's own `stack`.
 fn restack(marks: &mut [Placed], values: &[Option<f64>]) {
     let stacked: Vec<usize> = (0..marks.len()).filter(|&i| values[i].is_some()).collect();
     let entries: Vec<(StackKey, f64, _)> = stacked

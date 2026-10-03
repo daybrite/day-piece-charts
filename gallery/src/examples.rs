@@ -13,8 +13,8 @@
 //! "Randomize data" advances a seed rather than reading a clock, so the same presses give the same
 //! charts and a dayscript can photograph them.
 //!
-//! Most of them are interactive: `.select(sig)` reports what the pointer is over into a signal,
-//! `.guides(..)` reads the same signal back to draw a rule, rings and a label box for it, and the
+//! Most of them are interactive: `.interact(Inspect::new(sig))` reports what the pointer is over into a signal,
+//! `Inspect::guides(..)` reads the same signal back to draw a rule, rings and a label box for it, and the
 //! readout under the chart shows the same value in words, which is what an app does with a
 //! selection it owns. Hover reports on a pointer; a tap or a drag reports on a touch screen.
 //!
@@ -27,8 +27,8 @@
 //! own.
 
 use day::prelude::*;
-use day_piece_charts::select::{Guides, Selection, Snap};
 use day_piece_charts::*;
+use day_piece_charts::{Guides, Selection, Snap};
 
 use crate::{ChartPage as Page, res};
 
@@ -469,9 +469,11 @@ fn line_chart() -> impl Piece {
             marks
         })
         .y_label("Revenue (thousands)")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("lines")
         .grow(),
@@ -539,9 +541,11 @@ fn line_series() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("lines-target")
         .grow(),
@@ -595,9 +599,11 @@ fn area_chart() -> impl Piece {
                 .collect()
         })
         .y_label("Sessions")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("area")
         .grow(),
@@ -687,9 +693,11 @@ fn area_stacked() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("area-stacked")
         .grow(),
@@ -739,9 +747,11 @@ fn bar_chart() -> impl Piece {
                 .collect()
         })
         .y_label("Revenue (thousands)")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("bars")
         .grow(),
@@ -801,9 +811,11 @@ fn bar_grouped() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("bars-grouped")
         .grow(),
@@ -1084,9 +1096,11 @@ fn scatter_chart() -> impl Piece {
         .x_label("Load (kN)")
         .y_label("Strain (mm)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestMark)
-        .guides(Guides::CROSSHAIR)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestMark)
+                .guides(Guides::CROSSHAIR),
+        )
         .animated()
         .id("scatter")
         .grow(),
@@ -1223,9 +1237,11 @@ fn time_chart() -> impl Piece {
         .y_label("Close (USD)")
         .y_axis_trailing()
         .x_tick_count(4)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(
+            day_piece_charts::Inspect::new(selected)
+                .snap(Snap::NearestX)
+                .guides(Guides::RULE),
+        )
         .animated()
         .id("time")
         .grow(),

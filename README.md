@@ -157,16 +157,13 @@ fn selectable_chart() -> impl Piece {
         bar(value("Month", "Feb"), value("Revenue", 180.0)),
     ])
     .configure(move |config| config.y_axis.desired_count = tick_count.get())
-    .select(selected)
-    .snap(Snap::NearestX)
-    .guides(Guides::RULE)
+    .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
     .frame(480.0, 280.0)
 }
 ```
 
 `NearestX` selects values across series at the nearest x position; `NearestMark`
-selects one nearby mark, useful for scatter plots. `.select(...)` alone adds no
-visual guides. Hover, tap, and drag feed selection; leaving with a pointer clears
+selects one nearby mark, useful for scatter plots. `Inspect::guides(Guides::NONE)` reports values without drawing guides. Hover, tap, and drag feed selection; leaving with a pointer clears
 it, while ending a touch drag retains it.
 
 Most of the [examples](#examples) below are wired this way.
@@ -217,7 +214,7 @@ come from the [project website](https://daybrite.github.io/day-piece-charts/), w
 from each run's captures; its gallery page carries the same screens as every other platform the
 demo runs on. To take them locally: `day launch -p web-dom --script dayscript/gallery.yaml`.
 
-Most of the charts are interactive. `.select(sig)` reports what the pointer is over into a signal
+Most of the charts are interactive. `.interact(Inspect::new(sig))` reports what the pointer is over into a signal
 the app owns; `.guides(..)` reads that signal back to draw a rule through the position, a ring on
 each selected mark, and a box naming their values; the line under each chart is the same selection
 as text. Hover reports on a pointer, a tap or a drag on a touch screen. Each screenshot was taken
@@ -271,9 +268,7 @@ fn line_chart() -> impl Piece {
                 .collect()
         })
         .y_label("Revenue (thousands)")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("lines")
         .grow(),
         selection_readout(selected),
@@ -336,9 +331,7 @@ fn line_series() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("lines-target")
         .grow(),
         selection_readout(selected),
@@ -401,9 +394,7 @@ fn area_chart() -> impl Piece {
                 .collect()
         })
         .y_label("Sessions")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("area")
         .grow(),
         selection_readout(selected),
@@ -454,9 +445,7 @@ fn area_stacked() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("area-stacked")
         .grow(),
         selection_readout(selected),
@@ -505,9 +494,7 @@ fn bar_chart() -> impl Piece {
                 .collect()
         })
         .y_label("Revenue (thousands)")
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("bars")
         .grow(),
         selection_readout(selected),
@@ -559,9 +546,7 @@ fn bar_grouped() -> impl Piece {
         })
         .y_label("Revenue (thousands)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("bars-grouped")
         .grow(),
         selection_readout(selected),
@@ -810,9 +795,7 @@ fn scatter_chart() -> impl Piece {
         .x_label("Load (kN)")
         .y_label("Strain (mm)")
         .legend(LegendPosition::Bottom)
-        .select(selected)
-        .snap(Snap::NearestMark)
-        .guides(Guides::CROSSHAIR)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestMark).guides(Guides::CROSSHAIR))
         .id("scatter")
         .grow(),
         selection_readout(selected),
@@ -917,9 +900,7 @@ fn time_chart() -> impl Piece {
         .y_label("Close (USD)")
         .y_axis_trailing()
         .x_tick_count(4)
-        .select(selected)
-        .snap(Snap::NearestX)
-        .guides(Guides::RULE)
+        .interact(day_piece_charts::Inspect::new(selected).snap(Snap::NearestX).guides(Guides::RULE))
         .id("time")
         .grow(),
         selection_readout(selected),
@@ -1089,18 +1070,102 @@ Axis labels are thinned by their measured bounds when a viewport is too small to
 show every categorical or explicitly pinned tick. Marks and gridlines retain the
 full data; label collision checks also respect reversed and RTL axes.
 
-### Interactive legends and measured annotations
+### Declarative interaction grammar
 
-`legend(|| Vec<LegendEntry>)` builds native legend rows. Give an entry a stable series key,
-its display label and color, optional `.detail(localized_text)` and `.link(target)`.
-Links use Day's registered route/URL handling by default; `.on_link(|target| ...)` registers
-an application handler. Linked rows use a pointer cursor and highlight on hover. Share a
-`Signal<Option<String>>` through `Legend::highlight` and `Chart::highlight_series` to emphasize
-the matching series without changing its geometry or restarting its animation.
+The interaction model follows the selection, event-binding and predicate concepts in
+[Vega-Lite: A Grammar of Interactive Graphics](https://idl.cs.washington.edu/files/2017-VegaLite-InfoVis.pdf)
+and [Vega-Lite's selection parameters](https://vega.github.io/vega-lite/docs/selection.html).
+It is a native Rust grammar, not a Vega-Lite JSON parser or JavaScript dependency.
 
-Use `.select(selection).snap(Snap::NearestY).guides(Guides::CROSSHAIR)` for horizontal bars;
-selection identifies the category and its range endpoint anywhere along that row. Categorical
-heatmap cells support `Snap::NearestMark`; `.selection_value(value(localized_annotation, count))`
-adds an explicit measured value when their two position channels alone cannot express it.
-The selection exposes both the formatted label and numeric value. Existing nearest-x guides
-work well for publication timelines. Hover, tap and drag all use the last drawn hit model.
+An app owns a parameter, binds input events to it, then uses its data query wherever needed:
+
+```rust
+use day_piece_charts::{PointSelection, Projection, EventSource, Toggle, Visual};
+let groups = PointSelection::new().project(Projection::Series);
+chart(series_marks)
+    .interact(groups.on(EventSource::Click).toggle(Toggle::Always))
+    .condition(groups.predicate(), Visual::default(), Visual::opacity(0.15));
+```
+
+`Chart::interact` composes inspection, discrete selection, interval brushing, viewport
+navigation and registered links. Inspection is a binding like any other; the old chart-wide
+`select`, `snap`, `guides` and `highlight_series` builders have been removed. Existing readout
+signals migrate to `.interact(Inspect::new(signal).snap(...).guides(...))`.
+
+**Discrete parameters.** `PointSelection` holds semantic `Record` tuples, independently of
+pixels and formatted labels. Project over stable mark keys, x/y channels, series, or named
+fields with `Projection::Fields(&["country", "year"])`. Attach fields using `Mark::field`;
+`Mark::key` also supplies animation identity. Bind hover or click, with replace, always-toggle
+or shift-toggle behavior. Hover exit clears transient queries; touch taps and scrubs retain
+inspection until the next gesture. `clear`, `replace` and `toggle` are available to native
+controls, commands and application logic. The gallery's input-bound page synchronizes a
+picker, chart and legend through the same field-projected parameter.
+
+**Interval parameters.** `IntervalSelection` stores data-space `Bounds`, projected over
+`Axes::X`, `Y` or `XY`. A brush in one chart can highlight another, filter data, compute an
+aggregate or provide a detail view's domain:
+
+```rust
+let range = IntervalSelection::new().axes(Axes::X);
+let overview = chart(all_samples).interact(range.brush());
+let detail = chart(all_samples).domain(range);
+let filtered = chart(all_samples).filter(range.predicate());
+```
+
+Continuous and categorical brushes work on reversed axes; continuous extents use the scale's
+inverse, including logarithmic scales. Resizing changes brush pixels without changing its
+query. Drag inside a continuous brush to translate it, or disable translation with
+`.brush().translate(false)`. Drag outside the plot does not start a brush.
+
+**Predicate algebra and encodings.** Parameter predicates compose through `and`, `or` and
+`negate`. `Predicate::matches(&mark)` and `contains(&record)` let apps derive new datasets,
+counts or summaries. Empty parameters match everything by default, as in Vega-Lite; use
+`.empty_matches(false)` when emptiness should match nothing. `Chart::filter` filters before
+resolving scales; pin domains when comparisons should stay stable. `Chart::condition` applies
+opacity, color, symbol area or line width after geometry and animation are resolved, so
+highlighting does not move marks, change domains or restart transitions. Multiple conditions
+compose in declaration order; multiple brushes can form union/intersection predicates across
+views without a hidden global selection store.
+
+**Legends are input surfaces.** Built-in canvas legends participate in point selection.
+`legend(|| Vec<LegendEntry>)` supplies native rows when custom labels, details or links are
+needed. Bind the same parameter using `.interact(groups.on(EventSource::Click))`. A legend
+entry defaults to its series key; `.record(record)` supports named-field projections.
+Display labels remain separate from identity. Native rows stack fully and expose pointer
+cursors and activation roles; selected rows highlight. A hover-bound parameter also links
+row emphasis to its chart's marks. All labels/detail/annotation text must be localized by
+the host application.
+
+**Inspection and links.** `Inspect` owns a localized readout signal and optional guides.
+`Snap::Hit` tests actual bars, cells, symbols and donut wedges, respecting holes and angular
+gaps; nearest-x, nearest-y and nearest-mark snapping support time series, horizontal bars and
+scatterplots. `Mark::selection_value(value(localized_text, measured_value))` supplies the
+measurement that position alone cannot express, such as a heatmap cell count. Inspection,
+point selection and links can coexist. Add `.link(target)` to a mark or legend entry, then
+register `Links::new().on_open(handler)` on either surface. Without a custom handler, links
+use Day's registered route/URL handling. Link hit targets use a pointer cursor.
+
+**Scale navigation.** `.interact(viewport.pan_zoom())` binds the parameter to the chart's
+continuous scale domains. Primary-pointer drags and native pan gestures translate the view;
+pinch magnification and primary-modified wheel/pan events zoom around their input anchor.
+If brushing and viewport navigation share a chart, primary dragging brushes; pan/pinch remain
+viewport navigation. Gesture availability follows the host toolkit. Reset buttons in the demo
+work everywhere, as do its explicit zoom controls. Escape clears bindings on a focused chart.
+Categorical intervals query categories but do not bind continuous scale domains or support
+continuous brush translation/zoom.
+
+The runtime uses the last drawn hit model; pointer events do not re-run scale inference or
+access any application database. Reactive parameters live in Day scopes, and all rendering
+and gesture handling use the common Day canvas/pieces API across toolkits.
+
+Ten native examples are shared by `demo/` and Day-Showcase: linked points, brush-driven
+summaries, overview/detail, shared legends, cell inspection, viewport navigation, predicate
+composition, registered links, linked filtering and two-way input-bound field selection.
+Run `day launch -p macos-appkit --script dayscript/interactions.yaml --keep-alive` from
+`demo/` to exercise and explore them.
+
+Brush bindings clear their interval when clicking or tapping within the plot outside the
+selected area. Clicking inside preserves it, and dragging inside moves it. Use
+`range.brush().clear_on_outside(false)` to disable outside-click clearing. Clearing a
+shared interval restores linked filters and scale domains to their unselected defaults;
+independent point or legend selections remain intact.

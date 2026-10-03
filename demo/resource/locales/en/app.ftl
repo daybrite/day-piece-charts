@@ -6,3 +6,5 @@ app_title = Charts Demo
 # The sidebar: its two groups of rows.
 nav_demo = This demo
 nav_examples = Examples
+
+nav_interactions = Interactions

@@ -85,3 +85,42 @@ ex_dist_fan = 扇形
 
 # 应用将这些页面作为单个页面展示时（`gallery()`）页面上方的选择器。
 gallery_page = 图表
+
+# Declarative interaction examples
+inter_linked = 联动点选择
+inter_brush = 框选与交叉筛选
+inter_overview = 概览与详情
+inter_legend = 共享图例选择
+inter_cells = 交互式热力图
+inter_viewport = 平移和缩放
+inter_compose = 组合选择条件
+inter_links = 注册图表链接
+inter_linked_note = 点击任一视图中的点。按住 Shift 点击可添加或移除点；相同标识关联两种编码。
+inter_brush_note = 拖动矩形选择观测值。汇总仅统计选中的观测值。在选框内拖动可移动选区。 点击或轻触选区外部可清除选择。
+inter_overview_note = 在概览中拖动选择水平范围。详情视图将此范围用作坐标域。 点击或轻触选区外部可清除选择。
+inter_legend_note = 点击扇形、点或任一图例来切换分组。同一参数协调所有视图。
+inter_cells_note = 悬停、点击或拖动浏览单元格以查看数据。选中的单元格保持高亮。
+inter_viewport_note = 拖动平移，使用触控板或双指捏合缩放，也可使用缩放按钮。重置会恢复原始范围。
+inter_compose_note = 在上方视图中框选，并在图例中选择分组。上方显示交集，下方显示并集。 点击或轻触选区外部可清除选择。
+inter_links_note = 点击扇形或图例链接。两者使用同一注册处理程序，在下方显示路由。
+inter_reset = 重置选择
+inter_zoom_in = 放大
+inter_zoom_out = 缩小
+inter_group_a = 分组甲
+inter_group_b = 分组乙
+inter_group_c = 分组丙
+inter_x = 测量 X
+inter_y = 测量 Y
+inter_count_axis = 观测值
+inter_count = 已选择 { NUMBER($count, maximumFractionDigits: 0) } 个观测值
+inter_band = 分区 { NUMBER($band, maximumFractionDigits: 0) }
+inter_cell = 分区 { NUMBER($band, maximumFractionDigits: 0) } · { NUMBER($count, maximumFractionDigits: 0) } 个观测值
+inter_link_target = 已激活路由：{ $target }
+
+inter_select_sample = 选择一个观测值
+
+inter_filtered = 联动数据筛选
+inter_inputs = 输入绑定选择
+inter_filtered_note = 在上方视图中框选。下方视图使用同一条件筛选数据，并保留原始坐标轴。 点击或轻触选区外部可清除选择。
+inter_inputs_note = 在选择器、图表或图例中选择分组。基于字段的选择条件保持三个控件同步。
+inter_all_groups = 所有分组

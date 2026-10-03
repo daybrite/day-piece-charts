@@ -16,7 +16,7 @@
 //! | stage | here |
 //! |---|---|
 //! | variables | [`value`] / [`time`] bind a column to a channel |
-//! | marks | [`bar`], [`line`], [`area`], [`point`], [`rect`], [`rule_x`], [`sector`] |
+//! | marks | [`bar`], [`line()`], [`area`], [`point`], [`rect`], [`rule_x`], [`sector`] |
 //! | position adjustment | [`Stacking`], [`Mark::by_position`] (dodging) |
 //! | scales | [`ScaleKind::Linear`], `Log`, `Power`, `Time`, `Band`, `Point` |
 //! | guides | [`AxisSpec`], [`LegendPosition`] |
@@ -56,8 +56,13 @@ pub mod animate;
 pub mod axis;
 pub mod coord;
 pub mod data;
+pub mod interaction;
 pub mod layout;
 pub mod legend;
+pub use interaction::{
+    Axes, Bounds, EventSource, Extent, Inspect, Interaction, IntervalSelection, Links,
+    PointSelection, Predicate, Projection, Record, Toggle, Visual,
+};
 pub mod mark;
 pub mod render;
 pub mod resolve;
@@ -118,12 +123,12 @@ pub struct Chart {
     x_domain_fn: Option<DomainFn>,
     y_domain_fn: Option<DomainFn>,
     configure_fn: Option<ConfigureFn>,
-    select: Option<Signal<Option<select::Selection>>>,
-    snap: select::Snap,
-    guides: select::Guides,
+    interactions: Vec<Interaction>,
+    conditions: Vec<interaction::Condition>,
+    filter: Option<Predicate>,
+    domain: Option<IntervalSelection>,
     transition: Option<AnimSpec>,
     appear: bool,
-    highlight_series: Option<Signal<Option<String>>>,
 }
 
 /// The transition [`Chart::animated`] uses: a spring that settles in about half a second with a
@@ -162,20 +167,44 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         x_domain_fn: None,
         y_domain_fn: None,
         configure_fn: None,
-        select: None,
-        snap: select::Snap::default(),
-        guides: select::Guides::NONE,
+        interactions: Vec::new(),
+        conditions: Vec::new(),
+        filter: None,
+        domain: None,
         transition: None,
         appear: false,
-        highlight_series: None,
     }
 }
 
 impl Chart {
-    /// Emphasize a stable series key shared with an interactive legend. Other series recede;
-    /// the signal does not mutate data, restart transitions, or affect scale / hit geometry.
-    pub fn highlight_series(mut self, signal: Signal<Option<String>>) -> Self {
-        self.highlight_series = Some(signal);
+    /// Bind an event-driven inspection, point query, brush, viewport or link interaction.
+    /// Several bindings can coexist; shared parameters coordinate independent views.
+    pub fn interact(mut self, interaction: impl Into<Interaction>) -> Self {
+        let interaction = interaction.into();
+        if let Interaction::Viewport(viewport) = &interaction {
+            self.domain = Some(viewport.parameter);
+        }
+        self.interactions.push(interaction);
+        self
+    }
+    /// Conditional encodings are evaluated after geometry/animation, so hovering never
+    /// retargets a transition or changes the chart's scale domain.
+    pub fn condition(mut self, predicate: Predicate, selected: Visual, other: Visual) -> Self {
+        self.conditions.push(interaction::Condition {
+            predicate,
+            selected,
+            other,
+        });
+        self
+    }
+    /// Filter input tuples declaratively. Pin a domain when a stable comparison is desired.
+    pub fn filter(mut self, predicate: Predicate) -> Self {
+        self.filter = Some(predicate);
+        self
+    }
+    /// Use a shared interval's continuous extents as scale domains (overview/detail).
+    pub fn domain(mut self, parameter: IntervalSelection) -> Self {
+        self.domain = Some(parameter);
         self
     }
 
@@ -294,40 +323,6 @@ impl Chart {
         self.plot_insets = Some(Insets::default());
         self
     }
-    /// Report what the pointer is over into `sig`, and read the same signal to draw
-    /// [`guides`](Chart::guides) for it (README.md "Selection").
-    ///
-    /// Two-way, like a slider's value: the chart writes, the chart reads, and the app owns the
-    /// signal, so the same selection can drive a readout, a detail pane or anything else without
-    /// the chart knowing. `None` means nothing is selected, which is what a pointer leaving the
-    /// plot writes.
-    ///
-    /// Fed by a tap, a drag and a hover together, because no one of them covers every device: a
-    /// hover is pointer-only, a tap is what a phone has, and a press that wiggles a pixel becomes
-    /// a drag on some backends. All three write the same value, so a backend reporting two of them
-    /// for one press changes nothing.
-    pub fn select(mut self, sig: Signal<Option<select::Selection>>) -> Self {
-        self.select = Some(sig);
-        self
-    }
-
-    /// How a point becomes a selection: the nearest x with every series' value there
-    /// ([`Snap::NearestX`](select::Snap::NearestX), the default, for a line chart), or the single
-    /// nearest mark ([`Snap::NearestMark`](select::Snap::NearestMark), for a scatter).
-    pub fn snap(mut self, snap: select::Snap) -> Self {
-        self.snap = snap;
-        self
-    }
-
-    /// What the chart draws for the current selection:
-    /// [`Guides::RULE`](select::Guides::RULE), [`Guides::CROSSHAIR`](select::Guides::CROSSHAIR),
-    /// or a struct of your own. The default draws nothing, so `.select(sig)` alone reports without
-    /// changing the picture.
-    pub fn guides(mut self, guides: select::Guides) -> Self {
-        self.guides = guides;
-        self
-    }
-
     /// Replace the measured margins with fixed ones. The default insets are computed from the
     /// axis labels the chart is about to draw; a chart with no axes wants none of that room, and
     /// a chart whose marks overhang the plot (a fat point at the last sample) wants a little.
@@ -549,10 +544,13 @@ fn draw_legend(
     entries: &[(String, Color)],
     lb: &LegendBox,
     plot: Rect,
-    label_size: f64,
-    font: &CanvasFont,
-    color: Color,
-) {
+    paint: &render::Paint2<'_>,
+    bindings: &[Interaction],
+) -> Vec<select::HitMark> {
+    let mut hits = Vec::new();
+    let label_size = paint.label_size;
+    let font = &paint.font;
+    let color = paint.chrome.label;
     let line = day_core::measure_text("0", label_size, font).height;
     let (swatch, gap) = (legend_swatch(line), legend_gap(label_size));
     // Aligned to the plot rather than centered in the pane: a horizontal key starts where the
@@ -569,6 +567,25 @@ fn draw_legend(
         plot.origin.y
     };
     for (name, c) in entries {
+        let w = swatch + 4.0 + day_core::measure_text(name, label_size, font).width;
+        let rect = Rect::new(x - 2.0, y - 2.0, w + 4.0, line + 4.0);
+        let record = Record::series(name.clone());
+        let selected=bindings.iter().any(|b| matches!(b,Interaction::Point(p) if !p.parameter.is_empty() && p.parameter.contains(&record)));
+        if selected {
+            d.fill(Shape::Rect(rect), c.with_alpha(0.14));
+        }
+        hits.push(select::HitMark {
+            legend: true,
+            record,
+            link: None,
+            region: select::HitRegion::Rect(rect),
+            at: Point::new(x + w / 2.0, y + line / 2.0),
+            series: name.clone(),
+            color: *c,
+            x_label: name.clone(),
+            y_label: String::new(),
+            value: 0.0,
+        });
         d.fill(
             Shape::Ellipse(Rect::new(x, y + (line - swatch) / 2.0, swatch, swatch)),
             *c,
@@ -589,13 +606,13 @@ fn draw_legend(
                 font: font.clone(),
             },
         );
-        let w = swatch + 4.0 + day_core::measure_text(name, label_size, font).width;
         if lb.horizontal {
             x += w + gap;
         } else {
             y += line + 4.0;
         }
     }
+    hits
 }
 
 /// A chart's transition state: what it drew last, and the blend in flight.
@@ -710,12 +727,12 @@ impl Piece for Chart {
             x_domain_fn,
             y_domain_fn,
             configure_fn,
-            select,
-            snap,
-            guides,
+            interactions,
+            conditions,
+            filter,
+            domain,
             transition,
             appear,
-            highlight_series,
         } = self;
 
         // The transition in flight, if any (README "Animation"). The draw closure starts one when
@@ -735,172 +752,398 @@ impl Piece for Chart {
         // container's to decide, and the leaf grows rather than asking for an intrinsic size the
         // data cannot know.
         let hits_draw = hits.clone();
-        day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
-            if size.width <= 2.0 || size.height <= 2.0 {
-                return;
-            }
-            // Tracked inside the binding, so a light/dark switch re-records without the app
-            // rebuilding the chart.
-            let ch = chrome
-                .clone()
-                .unwrap_or_else(|| Chrome::for_dark(day_core::dark_mode()));
-            let ms = (marks)();
-            // A domain closure is read here, inside the binding, so the scale follows the same
-            // signals the marks do.
-            let mut x_scale = x_scale.clone();
-            if let Some(f) = &x_domain_fn {
-                x_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
-            }
-            let mut y_scale = y_scale.clone();
-            if let Some(f) = &y_domain_fn {
-                y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
-            }
-            // Read inside the binding, so every signal the closure touches re-records the chart.
-            let mut x_axis = x_axis.clone();
-            let mut y_axis = y_axis.clone();
-            let mut coordinate = coordinate;
-            if let Some(f) = &configure_fn {
-                let mut cfg = ChartConfig {
-                    x_scale,
-                    y_scale,
-                    x_axis,
-                    y_axis,
-                    coordinate,
+        let interactions = Rc::new(interactions);
+        let interactions_draw = interactions.clone();
+        let pointer = Signal::new(false);
+        let sessions: Rc<std::cell::RefCell<Vec<interaction::DragSession>>> =
+            Rc::new(std::cell::RefCell::new(
+                (0..interactions.len())
+                    .map(|_| interaction::DragSession::default())
+                    .collect(),
+            ));
+        let pinch_scale = Rc::new(std::cell::Cell::new(1.0));
+        let bindings_need_hover = interactions.iter().any(|b| {
+            matches!(
+                b,
+                Interaction::Inspect(_) | Interaction::Point(_) | Interaction::Links(_)
+            )
+        });
+        let bindings_need_tap = bindings_need_hover
+            || interactions
+                .iter()
+                .any(|b| matches!(b, Interaction::Brush(brush) if brush.clear_on_outside));
+        let bindings_need_drag = interactions.iter().any(|b| {
+            matches!(
+                b,
+                Interaction::Inspect(_)
+                    | Interaction::Brush(_)
+                    | Interaction::Viewport(_)
+                    | Interaction::Point(interaction::PointBinding {
+                        trigger: EventSource::Hover,
+                        ..
+                    })
+            )
+        });
+        let bindings_need_viewport = interactions
+            .iter()
+            .any(|b| matches!(b, Interaction::Viewport(_)));
+        let mut piece =
+            day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
+                if size.width <= 2.0 || size.height <= 2.0 {
+                    return;
+                }
+                // Tracked inside the binding, so a light/dark switch re-records without the app
+                // rebuilding the chart.
+                let ch = chrome
+                    .clone()
+                    .unwrap_or_else(|| Chrome::for_dark(day_core::dark_mode()));
+                let mut ms = (marks)();
+                if let Some(predicate) = &filter {
+                    ms.retain(|mark| predicate.matches(mark));
+                }
+                // A domain closure is read here, inside the binding, so the scale follows the same
+                // signals the marks do.
+                let mut x_scale = x_scale.clone();
+                if let Some(f) = &x_domain_fn {
+                    x_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+                }
+                let mut y_scale = y_scale.clone();
+                if let Some(f) = &y_domain_fn {
+                    y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+                }
+                // Read inside the binding, so every signal the closure touches re-records the chart.
+                let mut x_axis = x_axis.clone();
+                let mut y_axis = y_axis.clone();
+                let mut coordinate = coordinate;
+                if let Some(f) = &configure_fn {
+                    let mut cfg = ChartConfig {
+                        x_scale,
+                        y_scale,
+                        x_axis,
+                        y_axis,
+                        coordinate,
+                    };
+                    f(&mut cfg);
+                    x_scale = cfg.x_scale;
+                    y_scale = cfg.y_scale;
+                    x_axis = cfg.x_axis;
+                    y_axis = cfg.y_axis;
+                    coordinate = cfg.coordinate;
+                }
+
+                if let Some(parameter) = domain {
+                    if parameter.axes.x()
+                        && let Some((lo, hi)) = parameter.x_domain()
+                    {
+                        x_scale.domain = Some(Interval::new(lo, hi));
+                    }
+                    if parameter.axes.y()
+                        && let Some((lo, hi)) = parameter.y_domain()
+                    {
+                        y_scale.domain = Some(Interval::new(lo, hi));
+                    }
+                }
+                // The legend is measured first: it takes its space out of the pane before the plot
+                // rectangle is computed, so the two can never overlap.
+                let series: Vec<(String, Color)> = {
+                    let mut seen: Vec<String> = Vec::new();
+                    for m in &ms {
+                        if let Some(s) = &m.series {
+                            let k = s.datum.to_string();
+                            if !seen.contains(&k) {
+                                seen.push(k);
+                            }
+                        }
+                    }
+                    seen.iter()
+                        .enumerate()
+                        .map(|(i, s)| (s.clone(), (colors)(i, s)))
+                        .collect()
                 };
-                f(&mut cfg);
-                x_scale = cfg.x_scale;
-                y_scale = cfg.y_scale;
-                x_axis = cfg.x_axis;
-                y_axis = cfg.y_axis;
-                coordinate = cfg.coordinate;
-            }
+                let lb = legend_layout(&series, legend, size, label_size, &font);
+                let legend_insets = lb.as_ref().map(|l| l.insets).unwrap_or_default();
 
-            // The legend is measured first: it takes its space out of the pane before the plot
-            // rectangle is computed, so the two can never overlap.
-            let series: Vec<(String, Color)> = {
-                let mut seen: Vec<String> = Vec::new();
-                for m in &ms {
-                    if let Some(s) = &m.series {
-                        let k = s.datum.to_string();
-                        if !seen.contains(&k) {
-                            seen.push(k);
+                let cfg = resolve::Config {
+                    x_scale: &x_scale,
+                    y_scale: &y_scale,
+                    x_axis: &x_axis,
+                    y_axis: &y_axis,
+                    coordinate,
+                    series_colors: &*colors,
+                    label_size,
+                    font: font.clone(),
+                    legend_insets,
+                    plot_insets,
+                };
+                let target = resolve::resolve(ms, size, &cfg);
+                // Subscribed so each frame of a transition re-records; idle, it never fires.
+                frame.track();
+                let resolved = motion_frame(
+                    &motion,
+                    target,
+                    size,
+                    // Ambient intent wins, as it does for native widgets.
+                    day_core::current_anim().or(transition),
+                    appear,
+                    clock,
+                    frame,
+                );
+                let paint = render::Paint2 {
+                    chrome: &ch,
+                    label_size,
+                    font: font.clone(),
+                    x_axis: &x_axis,
+                    y_axis: &y_axis,
+                    series_colors: &*colors,
+                };
+                let emphasized = if conditions.is_empty() {
+                    None
+                } else {
+                    let mut painted = resolved.clone();
+                    for mark in &mut painted.marks {
+                        for condition in &conditions {
+                            let visual = if condition.predicate.matches(&mark.mark) {
+                                condition.selected
+                            } else {
+                                condition.other
+                            };
+                            visual.apply(&mut mark.mark);
+                        }
+                    }
+                    Some(painted)
+                };
+                render::draw(d, emphasized.as_ref().unwrap_or(&resolved), &paint);
+                let legend_hits = if let Some(lb) = lb {
+                    draw_legend(d, &series, &lb, resolved.plot, &paint, &interactions_draw)
+                } else {
+                    Vec::new()
+                };
+                if !interactions_draw.is_empty() {
+                    let mut model = render::hit_model(&resolved, &paint);
+                    model.marks.extend(legend_hits);
+                    *hits_draw.borrow_mut() = model;
+                    let model = hits_draw.borrow();
+                    for binding in interactions_draw.iter() {
+                        match binding {
+                            Interaction::Inspect(inspect) => {
+                                if let Some(sel) = inspect.signal.get() {
+                                    render::draw_guides(d, &resolved, &paint, &sel, inspect.guides);
+                                }
+                            }
+                            Interaction::Brush(brush) => {
+                                if let Some(bounds) = brush.parameter.state.get()
+                                    && let Some(rect) = interaction::brush_rect(&bounds, &model)
+                                {
+                                    d.fill(Shape::Rect(rect), ch.label.with_alpha(0.10));
+                                    d.stroke(Shape::Rect(rect), ch.label.with_alpha(0.65), 1.0);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
-                seen.iter()
-                    .enumerate()
-                    .map(|(i, s)| (s.clone(), (colors)(i, s)))
-                    .collect()
-            };
-            let lb = legend_layout(&series, legend, size, label_size, &font);
-            let legend_insets = lb.as_ref().map(|l| l.insets).unwrap_or_default();
-
-            let cfg = resolve::Config {
-                x_scale: &x_scale,
-                y_scale: &y_scale,
-                x_axis: &x_axis,
-                y_axis: &y_axis,
-                coordinate,
-                series_colors: &*colors,
-                label_size,
-                font: font.clone(),
-                legend_insets,
-                plot_insets,
-            };
-            let target = resolve::resolve(ms, size, &cfg);
-            // Subscribed so each frame of a transition re-records; idle, it never fires.
-            frame.track();
-            let resolved = motion_frame(
-                &motion,
-                target,
-                size,
-                // Ambient intent wins, as it does for native widgets.
-                day_core::current_anim().or(transition),
-                appear,
-                clock,
-                frame,
-            );
-            let paint = render::Paint2 {
-                chrome: &ch,
-                label_size,
-                font: font.clone(),
-                x_axis: &x_axis,
-                y_axis: &y_axis,
-                series_colors: &*colors,
-            };
-            let emphasized = highlight_series
-                .and_then(|signal| signal.get())
-                .and_then(|key| {
-                    if !resolved.series.contains(&key) {
-                        return None;
+            }))
+            .cursor({
+                let bindings = interactions.clone();
+                move || {
+                    if pointer.get() {
+                        day_spec::Cursor::Pointer
+                    } else if bindings.iter().any(|b| matches!(b, Interaction::Brush(_))) {
+                        day_spec::Cursor::Crosshair
+                    } else if bindings
+                        .iter()
+                        .any(|b| matches!(b, Interaction::Viewport(_)))
+                    {
+                        day_spec::Cursor::Grab
+                    } else {
+                        day_spec::Cursor::Default
                     }
-                    let mut emphasized = resolved.clone();
-                    for mark in &mut emphasized.marks {
-                        if emphasized.series.get(mark.series_index) != Some(&key) {
-                            mark.mark.style.opacity *= 0.22;
+                }
+            });
+        if bindings_need_hover {
+            piece = piece.on_hover({
+                let hits = hits.clone();
+                let bindings = interactions.clone();
+                move |at| {
+                    let model = hits.borrow();
+                    pointer.set_if_changed(at.and_then(|p| model.hit(p)).is_some_and(|hit| {
+                        hit.link.is_some()
+                            && bindings.iter().any(|b| matches!(b, Interaction::Links(_)))
+                            || hit.legend
+                                && bindings.iter().any(|b| matches!(b, Interaction::Point(_)))
+                    }));
+                    for binding in bindings.iter() {
+                        match binding {
+                            Interaction::Inspect(inspect) => {
+                                inspect.signal.set_if_changed(
+                                    at.and_then(|p| model.resolve(p, inspect.snap)),
+                                );
+                            }
+                            Interaction::Point(point) if point.trigger == EventSource::Hover => {
+                                point.parameter.replace(
+                                    at.and_then(|p| model.record_at(p, point.snap))
+                                        .map(|h| h.record),
+                                );
+                            }
+                            _ => {}
                         }
                     }
-                    Some(emphasized)
-                });
-            render::draw(d, emphasized.as_ref().unwrap_or(&resolved), &paint);
-            if let Some(lb) = lb {
-                draw_legend(d, &series, &lb, resolved.plot, label_size, &font, ch.label);
-            }
-            // Record the hit model after drawing, from the same `resolved` the marks came from,
-            // so a pointer can only ever select something that is actually on screen.
-            if select.is_some() {
-                *hits_draw.borrow_mut() = render::hit_model(&resolved, &paint);
-            }
-            // The guides are drawn from the signal, so they follow the pointer without the app
-            // rebuilding anything: this read subscribes the whole recording to the selection.
-            if let Some(sig) = &select
-                && guides != select::Guides::NONE
-                && let Some(sel) = sig.get()
-            {
-                render::draw_guides(d, &resolved, &paint, &sel, guides);
-            }
-        }))
-        .on_hover({
-            let hits = hits.clone();
-            let sig = select;
-            move |at| {
-                if let Some(sig) = &sig {
-                    // Leaving clears it, which is why the handler takes an `Option` rather than
-                    // a phase to match on.
-                    let next = at.and_then(|p| hits.borrow().resolve(p, snap));
-                    if sig.get_untracked() != next {
-                        sig.set(next);
+                }
+            });
+        }
+        if bindings_need_tap {
+            piece = piece.on_tap_at({
+                let hits = hits.clone();
+                let bindings = interactions.clone();
+                move |p| {
+                    let model = hits.borrow();
+                    for binding in bindings.iter() {
+                        match binding {
+                            Interaction::Inspect(inspect) => {
+                                inspect
+                                    .signal
+                                    .set_if_changed(model.resolve(p, inspect.snap));
+                            }
+                            Interaction::Point(point) => point.activate(
+                                model.record_at(p, point.snap).map(|h| h.record),
+                                day_core::modifiers().shift,
+                            ),
+                            Interaction::Brush(brush) => interaction::tap_brush(*brush, &model, p),
+                            Interaction::Links(links) => {
+                                if let Some(target) = model.hit(p).and_then(|h| h.link.as_ref()) {
+                                    if let Some(handler) = &links.handler {
+                                        handler(target);
+                                    } else {
+                                        day_pieces::open_link(target);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
-            }
-        })
-        .on_tap_at({
-            let hits = hits.clone();
-            let sig = select;
-            move |p| {
-                if let Some(sig) = &sig {
-                    let next = hits.borrow().resolve(p, snap);
-                    if sig.get_untracked() != next {
-                        sig.set(next);
+            });
+        }
+        if bindings_need_drag {
+            piece = piece.on_drag({
+                let hits = hits.clone();
+                let bindings = interactions.clone();
+                let sessions = sessions.clone();
+                move |drag| {
+                    let model = hits.borrow();
+                    let mut sessions = sessions.borrow_mut();
+                    for (i, binding) in bindings.iter().enumerate() {
+                        match binding {
+                            Interaction::Inspect(inspect) => {
+                                inspect
+                                    .signal
+                                    .set_if_changed(model.resolve(drag.location, inspect.snap));
+                            }
+                            Interaction::Point(point) if point.trigger == EventSource::Hover => {
+                                point.parameter.replace(
+                                    model.record_at(drag.location, point.snap).map(|h| h.record),
+                                )
+                            }
+                            Interaction::Brush(brush) => interaction::drag_brush(
+                                *brush,
+                                &mut sessions[i],
+                                &model,
+                                drag.phase,
+                                drag.location,
+                            ),
+                            Interaction::Viewport(viewport)
+                                if !bindings.iter().any(|b| matches!(b, Interaction::Brush(_))) =>
+                            {
+                                if drag.phase == day_spec::DragPhase::Began {
+                                    sessions[i].previous = Some(drag.location);
+                                } else if let Some(previous) = sessions[i].previous {
+                                    interaction::translate(
+                                        viewport.parameter,
+                                        &model,
+                                        Point::new(
+                                            drag.location.x - previous.x,
+                                            drag.location.y - previous.y,
+                                        ),
+                                    );
+                                    sessions[i].previous = Some(drag.location);
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
-            }
-        })
-        .on_drag({
-            let hits = hits.clone();
-            let sig = select;
-            // A finger scrubbing along the plot: every phase re-selects, so the label tracks the
-            // drag. Nothing is cleared at the end: a touch device has no pointer to leave with,
-            // so the last selection stands until the next press, which is what a reader wants.
-            move |drag| {
-                if let Some(sig) = &sig {
-                    let next = hits.borrow().resolve(drag.location, snap);
-                    if sig.get_untracked() != next {
-                        sig.set(next);
+            });
+        }
+        if bindings_need_viewport {
+            piece = piece.on_pan({
+                let hits = hits.clone();
+                let bindings = interactions.clone();
+                move |pan| {
+                    for binding in bindings.iter() {
+                        if let Interaction::Viewport(viewport) = binding {
+                            if day_core::modifiers().primary {
+                                interaction::zoom(
+                                    viewport.parameter,
+                                    &hits.borrow(),
+                                    pan.location,
+                                    (-pan.delta.y * 0.01).exp(),
+                                );
+                            } else {
+                                interaction::translate(
+                                    viewport.parameter,
+                                    &hits.borrow(),
+                                    pan.delta,
+                                );
+                            }
+                        }
                     }
                 }
-            }
-        })
-        .build(cx)
+            });
+        }
+        if bindings_need_viewport {
+            piece = piece.on_pinch({
+                let hits = hits.clone();
+                let bindings = interactions.clone();
+                move |pinch| {
+                    let previous = if pinch.phase == day_spec::DragPhase::Began {
+                        1.0
+                    } else {
+                        pinch_scale.get()
+                    };
+                    for binding in bindings.iter() {
+                        if let Interaction::Viewport(viewport) = binding {
+                            interaction::zoom(
+                                viewport.parameter,
+                                &hits.borrow(),
+                                pinch.location,
+                                pinch.scale / previous,
+                            );
+                        }
+                    }
+                    pinch_scale.set(pinch.scale);
+                }
+            });
+        }
+        if !interactions.is_empty() {
+            piece = piece.on_key({
+                let bindings = interactions.clone();
+                move |key| {
+                    if key.key == "Escape" {
+                        for binding in bindings.iter() {
+                            match binding {
+                                Interaction::Inspect(i) => {
+                                    i.signal.set_if_changed(None);
+                                }
+                                Interaction::Point(p) => p.parameter.clear(),
+                                Interaction::Brush(b) => b.parameter.clear(),
+                                Interaction::Viewport(v) => v.parameter.clear(),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        piece.build(cx)
     }
 }

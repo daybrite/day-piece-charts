@@ -71,3 +71,19 @@ day patch --check                       # every day crate now resolves from the 
 
 Delete `.cargo/config.toml` to go back to the git dependency. The lock is gitignored, so a
 patched build cannot leave the checkout's paths behind for anyone else.
+
+## Explore declarative interactions
+
+The sidebar includes ten interactive examples from the shared gallery: linked point queries,
+brush-driven summaries, overview/detail, legend selections, heatmap inspection, pan/zoom,
+predicate composition, registered links, linked filtering and input-bound field selections.
+Click, hover, drag or use each page's native controls; reset buttons restore the starting view.
+The input page synchronizes its picker, plotted points and legend in both directions.
+
+```sh
+day launch -p macos-appkit --script dayscript/interactions.yaml --keep-alive
+```
+
+The walkthrough captures every new page and checks selection counts, resets, route handling
+and input synchronization. The implementation lives in `../gallery/src/interactions.rs`,
+so Day-Showcase receives the same localized pages rather than a separate copy.

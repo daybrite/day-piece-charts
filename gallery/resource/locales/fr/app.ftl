@@ -90,3 +90,42 @@ ex_dist_fan = Éventail
 
 # Le sélecteur au-dessus des pages quand une app les montre en une seule (`gallery()`).
 gallery_page = Graphique
+
+# Declarative interaction examples
+inter_linked = Sélections de points liées
+inter_brush = Brossage et filtrage croisé
+inter_overview = Vue générale et détails
+inter_legend = Sélections de légende partagées
+inter_cells = Carte thermique interactive
+inter_viewport = Déplacer et zoomer
+inter_compose = Combiner les prédicats de sélection
+inter_links = Liens de graphique enregistrés
+inter_linked_note = Cliquez sur un point dans une vue. Maj-clic ajoute ou retire des points ; leur identité relie les deux représentations.
+inter_brush_note = Tracez un rectangle pour sélectionner des observations. Le résumé ne compte que celles-ci. Déplacez la sélection en glissant à l’intérieur. Cliquez ou touchez en dehors de la zone sélectionnée pour l’effacer.
+inter_overview_note = Sélectionnez une plage horizontale dans la vue générale. La vue détaillée utilise cette plage comme domaine. Cliquez ou touchez en dehors de la zone sélectionnée pour l’effacer.
+inter_legend_note = Cliquez sur les secteurs, points ou légendes pour sélectionner des groupes. Le même paramètre coordonne toutes les vues.
+inter_cells_note = Survolez, touchez ou parcourez les cellules pour examiner leurs données. La cellule sélectionnée reste lumineuse.
+inter_viewport_note = Glissez pour déplacer, pincez pour zoomer, ou utilisez les boutons. Réinitialiser restaure les domaines initiaux.
+inter_compose_note = Sélectionnez une zone en haut et des groupes dans la légende. En haut : leur intersection ; en bas : leur union. Cliquez ou touchez en dehors de la zone sélectionnée pour l’effacer.
+inter_links_note = Cliquez sur un secteur ou un lien de légende. Le même gestionnaire affiche la route ci-dessous.
+inter_reset = Réinitialiser la sélection
+inter_zoom_in = Zoom avant
+inter_zoom_out = Zoom arrière
+inter_group_a = Groupe A
+inter_group_b = Groupe B
+inter_group_c = Groupe C
+inter_x = Mesure X
+inter_y = Mesure Y
+inter_count_axis = Observations
+inter_count = { NUMBER($count, maximumFractionDigits: 0) } observations sélectionnées
+inter_band = Bande { NUMBER($band, maximumFractionDigits: 0) }
+inter_cell = Bande { NUMBER($band, maximumFractionDigits: 0) } · { NUMBER($count, maximumFractionDigits: 0) } observations
+inter_link_target = Route activée : { $target }
+
+inter_select_sample = Sélectionner une observation
+
+inter_filtered = Filtrage de données lié
+inter_inputs = Sélections liées aux contrôles
+inter_filtered_note = Sélectionnez une zone en haut. Le bas filtre ses données avec la même requête et conserve les axes initiaux. Cliquez ou touchez en dehors de la zone sélectionnée pour l’effacer.
+inter_inputs_note = Choisissez un groupe dans le sélecteur, le graphique ou la légende. Une requête sur un champ synchronise les trois contrôles.
+inter_all_groups = Tous les groupes

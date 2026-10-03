@@ -212,6 +212,8 @@ impl Default for MarkStyle {
 /// One mark: a kind, its position encodings, and its style.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mark {
+    pub fields: std::collections::BTreeMap<String, crate::Datum>,
+    pub link: Option<String>,
     pub kind: MarkKind,
     pub x: Option<Value>,
     pub x_end: Option<Value>,
@@ -251,6 +253,8 @@ impl Mark {
     fn new(kind: MarkKind) -> Self {
         Mark {
             kind,
+            fields: Default::default(),
+            link: None,
             x: None,
             x_end: None,
             y: None,
@@ -410,6 +414,16 @@ impl Mark {
     }
     /// Supply a measured value when position alone does not describe a mark. Its label is
     /// application-formatted display text; its numeric datum is available in the selection.
+    /// Attach a data field for projected selections; its name is a protocol key, not UI text.
+    pub fn field(mut self, name: impl Into<String>, value: impl crate::data::IntoDatum) -> Self {
+        self.fields.insert(name.into(), value.into_datum());
+        self
+    }
+    /// A registered route or URL, activated by a chart's `Links` interaction.
+    pub fn link(mut self, target: impl Into<String>) -> Self {
+        self.link = Some(target.into());
+        self
+    }
     pub fn selection_value(mut self, value: Value) -> Self {
         self.selection_value = Some(value);
         self

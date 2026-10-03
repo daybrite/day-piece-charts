@@ -2,7 +2,7 @@
 //!
 //! The chart writes what is under the pointer into an app-owned signal and reads the same signal
 //! to draw its guides. Two-way, like a slider's value, which is what makes the whole behaviour
-//! `.select(sig).snap(..).guides(..)` and leaves the app free to show the same selection its own
+//! `.interact(Inspect::new(sig).snap(..).guides(..))` and leaves the app free to show the same selection its own
 //! way (a readout beside the chart, a detail pane) by reading the signal it already owns.
 //!
 //! Three gestures feed it, and all three are needed. `on_hover` is the desktop idiom but is
@@ -52,6 +52,8 @@ pub enum Snap {
     NearestMark,
     /// Select a horizontal bar anywhere along its category row.
     NearestY,
+    /// Hit the actual bar, cell, symbol or wedge rather than nearby empty space.
+    Hit,
 }
 
 /// Which guides the chart draws for the current selection.
@@ -71,7 +73,7 @@ pub struct Guides {
 }
 
 impl Guides {
-    /// Nothing: the default, so `.select(sig)` alone reports without drawing.
+    /// Nothing: inspection still reports values without drawing guides.
     pub const NONE: Guides = Guides {
         vertical: false,
         horizontal: false,
@@ -102,6 +104,10 @@ impl Guides {
 /// search included) for every mouse motion.
 #[derive(Clone, Debug)]
 pub struct HitMark {
+    pub legend: bool,
+    pub record: crate::interaction::Record,
+    pub link: Option<String>,
+    pub region: HitRegion,
     pub at: Point,
     pub series: String,
     pub color: Color,
@@ -114,21 +120,93 @@ pub struct HitMark {
 #[derive(Clone, Debug, Default)]
 pub struct HitModel {
     pub plot: Rect,
+    pub x_scale: Option<crate::Scale>,
+    pub y_scale: Option<crate::Scale>,
     pub marks: Vec<HitMark>,
 }
 
+#[derive(Clone, Debug)]
+pub enum HitRegion {
+    Point(Point, f64),
+    Rect(Rect),
+    Sector {
+        center: Point,
+        inner: f64,
+        outer: f64,
+        start: f64,
+        end: f64,
+        gap: f64,
+    },
+}
+impl HitRegion {
+    pub fn contains(&self, point: Point) -> bool {
+        match self {
+            Self::Point(center, radius) => dist2(*center, point) <= radius * radius,
+            Self::Rect(rect) => crate::interaction::contains_rect(*rect, point),
+            Self::Sector {
+                center,
+                inner,
+                outer,
+                start,
+                end,
+                gap,
+            } => {
+                let dx = point.x - center.x;
+                let dy = point.y - center.y;
+                let radius = dx.hypot(dy);
+                if radius < *inner || radius > *outer || radius <= 0.0 {
+                    return false;
+                }
+                let direction = if end >= start { 1.0 } else { -1.0 };
+                let angle = dy.atan2(dx);
+                let offset = ((angle - start) * direction).rem_euclid(std::f64::consts::TAU);
+                let inset = (gap / radius).clamp(0.0, 1.0).asin();
+                offset >= inset && offset <= (end - start).abs() - inset
+            }
+        }
+    }
+}
 impl HitModel {
+    pub fn hit(&self, p: Point) -> Option<&HitMark> {
+        self.marks
+            .iter()
+            .rev()
+            .find(|m| (m.legend || contains(self.plot, p)) && m.region.contains(p))
+    }
+    pub fn record_at(&self, p: Point, snap: Snap) -> Option<RecordHit> {
+        if snap == Snap::Hit {
+            return self.hit(p).map(|m| RecordHit {
+                record: m.record.clone(),
+                link: m.link.clone(),
+            });
+        }
+        let selected = self.resolve(p, snap)?;
+        let at = selected.values.first()?.at;
+        self.marks.iter().find(|m| m.at == at).map(|m| RecordHit {
+            record: m.record.clone(),
+            link: m.link.clone(),
+        })
+    }
     /// The selection at `p`, or `None` if `p` is outside the plot or nothing is near enough.
     pub fn resolve(&self, p: Point, snap: Snap) -> Option<Selection> {
-        if self.marks.is_empty() || !contains(self.plot, p) {
+        if snap != Snap::Hit && (self.marks.is_empty() || !contains(self.plot, p)) {
             return None;
         }
         match snap {
+            Snap::Hit => {
+                let hit = self.hit(p)?;
+                Some(Selection {
+                    at: hit.at,
+                    x_label: hit.x_label.clone(),
+                    values: vec![value_of(hit)],
+                })
+            }
+
             Snap::NearestMark => {
                 // A radius, so hovering empty space selects nothing rather than the far-off mark
                 // that happens to be closest. Generous enough to forgive a few pixels of aim.
                 const REACH: f64 = 24.0;
-                let hit = self.marks.iter().min_by(|a, b| {
+                let hit = self.marks.iter().filter(|m| !m.legend).min_by(|a, b| {
                     dist2(a.at, p)
                         .partial_cmp(&dist2(b.at, p))
                         .unwrap_or(std::cmp::Ordering::Equal)
@@ -143,6 +221,7 @@ impl HitModel {
                 let hit = self
                     .marks
                     .iter()
+                    .filter(|m| !m.legend)
                     .min_by(|a, b| (a.at.y - p.y).abs().total_cmp(&(b.at.y - p.y).abs()))?;
                 Some(Selection {
                     at: hit.at,
@@ -157,6 +236,7 @@ impl HitModel {
                 let target = self
                     .marks
                     .iter()
+                    .filter(|m| !m.legend)
                     .min_by(|a, b| {
                         (a.at.x - p.x)
                             .abs()
@@ -170,7 +250,11 @@ impl HitModel {
                 // daily closes in a few hundred points), and listing both says the same series
                 // has two values at one date, which is not a thing.
                 let mut values: Vec<SelectedValue> = Vec::new();
-                for m in self.marks.iter().filter(|m| (m.at.x - target).abs() < 1.0) {
+                for m in self
+                    .marks
+                    .iter()
+                    .filter(|m| !m.legend && (m.at.x - target).abs() < 1.0)
+                {
                     match values.iter_mut().find(|v| v.series == m.series) {
                         Some(existing) => {
                             if (m.at.x - target).abs() < (existing.at.x - target).abs() {
@@ -194,6 +278,11 @@ impl HitModel {
             }
         }
     }
+}
+
+pub struct RecordHit {
+    pub record: crate::interaction::Record,
+    pub link: Option<String>,
 }
 
 fn value_of(m: &HitMark) -> SelectedValue {

@@ -54,6 +54,7 @@ pub fn root() -> impl Piece {
         match entry.page {
             ChartPage::Pipeline => nav = nav.section(res::str::nav_demo()),
             ChartPage::Lines => nav = nav.section(res::str::nav_examples()),
+            ChartPage::Linked => nav = nav.section(res::str::nav_interactions()),
             _ => {}
         }
         nav = nav.item(entry.page, (entry.title)(), move || entry.build());

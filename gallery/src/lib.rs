@@ -26,6 +26,7 @@ day_fluent::locales!();
 
 /// The charts the crate's README documents.
 mod examples;
+mod interactions;
 /// The pipeline page: one data set, five compositions, and what the pipeline derives.
 mod pipeline;
 
@@ -48,6 +49,16 @@ day::routes! {
         Heatmap => "heatmap",
         Time => "time",
         Sparkline => "sparkline",
+        Linked => "interactive-linked",
+        Brush => "interactive-brush",
+        Overview => "interactive-overview",
+        Legend => "interactive-legend",
+        Cells => "interactive-cells",
+        Viewport => "interactive-viewport",
+        Compose => "interactive-compose",
+        Links => "interactive-links",
+        Filtered => "interactive-filtered",
+        Inputs => "interactive-inputs",
     }
 }
 
@@ -89,6 +100,7 @@ pub fn pages() -> Vec<Entry> {
         build: || pipeline::pipeline_page().any(),
     }];
     all.extend(examples());
+    all.extend(interactions::pages());
     all
 }
 

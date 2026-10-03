@@ -1,0 +1,64 @@
+name: chart-interactions
+description: Shared queries, brush summaries, overview/detail, legends, links and navigation.
+flow:
+  - navigate: { route: interactive-linked }
+  - wait_for: { id: linked-primary }
+  - assert_text: { id: linked-count, key: day_piece_charts_gallery::inter_count, args: { count: 0 } }
+  - tap: { id: linked-select-sample }
+  - assert_text: { id: linked-count, key: day_piece_charts_gallery::inter_count, args: { count: 1 } }
+  - screenshot: interactive-linked
+  - tap: { id: linked-reset }
+  - navigate: { route: interactive-brush }
+  - wait_for: { id: brush-source }
+  - assert_text: { id: brush-count, key: day_piece_charts_gallery::inter_count, args: { count: 60 } }
+  - drag: { id: brush-source, from: [80, 40], to: [250, 130] }
+  - pause: { secs: 1 } # Let the filtered summary animation settle.
+  - screenshot: interactive-brush
+  - tap: { id: brush-source, at: [350, 80] }
+  - assert_text: { id: brush-count, key: day_piece_charts_gallery::inter_count, args: { count: 60 } }
+  - navigate: { route: interactive-overview }
+  - wait_for: { id: overview-source }
+  - drag: { id: overview-source, from: [80, 30], to: [220, 100] }
+  - screenshot: interactive-overview
+  - tap: { id: overview-source, at: [350, 80] }
+  - navigate: { route: interactive-legend }
+  - wait_for: { id: legend-donut }
+  - tap: { id: 'interactive-legend-Group A' }
+  - screenshot: interactive-legend
+  - tap: { id: legend-reset }
+  - navigate: { route: interactive-cells }
+  - wait_for: { id: interactive-cells }
+  - tap: { id: interactive-cells, at: [90, 80] }
+  - screenshot: interactive-cells
+  - navigate: { route: interactive-viewport }
+  - wait_for: { id: interactive-viewport }
+  - tap: { id: viewport-zoom-in }
+  - drag: { id: interactive-viewport, from: [140, 90], to: [170, 110] }
+  - screenshot: interactive-viewport
+  - tap: { id: viewport-reset }
+  - navigate: { route: interactive-compose }
+  - wait_for: { id: compose-intersection }
+  - tap: { id: 'compose-series-Group B' }
+  - drag: { id: compose-intersection, from: [70, 40], to: [240, 130] }
+  - screenshot: interactive-compose
+  - tap: { id: compose-intersection, at: [350, 80] }
+  - assert_text: { id: compose-count, key: day_piece_charts_gallery::inter_count, args: { count: 20 } }
+  - navigate: { route: interactive-links }
+  - wait_for: { id: interactive-links }
+  - tap: { id: 'link-series-Group B' }
+  - assert_text: { id: link-target, key: day_piece_charts_gallery::inter_link_target, args: { target: 'sample:1' } }
+  - screenshot: interactive-links
+  - navigate: { route: interactive-filtered }
+  - wait_for: { id: filtered-source }
+  - drag: { id: filtered-source, from: [80, 40], to: [250, 130] }
+  - screenshot: interactive-filtered
+  - tap: { id: filtered-source, at: [350, 80] }
+  - assert_text: { id: filtered-count, key: day_piece_charts_gallery::inter_count, args: { count: 60 } }
+  - navigate: { route: interactive-inputs }
+  - wait_for: { id: inputs-picker }
+  - select: { id: inputs-picker, index: 1 }
+  - assert_text: { id: inputs-count, key: day_piece_charts_gallery::inter_count, args: { count: 20 } }
+  - tap: { id: 'input-group-Group C' }
+  - assert_value: { id: inputs-picker, value: 3 }
+  - assert_text: { id: inputs-count, key: day_piece_charts_gallery::inter_count, args: { count: 20 } }
+  - screenshot: interactive-inputs

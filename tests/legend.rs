@@ -1,7 +1,9 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
 use day_mock::MockToolkit;
-use day_piece_charts::{LegendEntry, categorical, legend};
+use day_piece_charts::{
+    EventSource, LegendEntry, Links, PointSelection, Projection, categorical, legend,
+};
 use day_pieces::prelude::*;
 use day_reactive::{Signal, flush_sync};
 use day_spec::{Cursor, DragPhase, Event, NodeId, Point, Size, WindowOptions};
@@ -10,7 +12,7 @@ use day_spec::{Cursor, DragPhase, Event, NodeId, Point, Size, WindowOptions};
 fn linked_legend_registers_activation_and_hover_emphasis() {
     day_core::uninstall_tree();
     let (mock, probe) = MockToolkit::new();
-    let highlighted = Signal::new(None);
+    let highlighted = PointSelection::new().project(Projection::Series);
     let activated = Signal::new(String::new());
     let entries = Signal::new(Vec::new());
     day_core::launch_with(
@@ -22,8 +24,8 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
         },
         move || {
             legend(move || entries.get())
-                .highlight(highlighted)
-                .on_link(move |target| activated.set(target.into()))
+                .interact(highlighted.on(EventSource::Hover))
+                .links(Links::new().on_open(move |target| activated.set(target.into())))
                 .any()
         },
     );
@@ -59,7 +61,13 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
         },
     );
     flush_sync();
-    assert_eq!(highlighted.get_untracked().as_deref(), Some("one"));
+    assert_eq!(
+        highlighted.state.get_untracked()[0]
+            .series
+            .as_ref()
+            .and_then(|v| v.as_category()),
+        Some("one")
+    );
     assert!(
         probe
             .find_by_kind("day.container")
@@ -76,6 +84,6 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
         },
     );
     flush_sync();
-    assert_eq!(highlighted.get_untracked(), None);
+    assert!(highlighted.is_empty());
     day_core::uninstall_tree();
 }
