@@ -1048,7 +1048,7 @@ own code, so adding it to an app is a Cargo dependency and nothing more.
 
 ## Compatibility and development
 
-This checkout requires Rust 1.89 or newer and declares compatibility with Day 0.4 in
+This checkout requires Rust 1.89 or newer and declares compatibility with Day 0.5 in
 [Cargo.toml](Cargo.toml). The crate is consumed from Git, not crates.io. Its Day
 dependencies use `https://github.com/daybrite/day.git` without a branch, tag, or
 revision. Use the same source in your app and keep its `Cargo.lock` to record the
