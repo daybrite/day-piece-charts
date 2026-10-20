@@ -1,6 +1,6 @@
 // Copyright © The Daybrite Project
 // SPDX-License-Identifier: MPL-2.0
-use day_mock::MockToolkit;
+use day_mock::{MockHandle, MockToolkit, MockWidget};
 use day_piece_charts::{
     EventSource, LegendEntry, Links, PointSelection, Projection, categorical, legend,
 };
@@ -33,24 +33,48 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
         LegendEntry::new("two", "Same fixture title", categorical(1)).link("fixture:two"),
     ]);
     flush_sync();
-    let (_, first) = probe
+    let (first_handle, first) = probe
         .find_by_kind("day.container")
         .into_iter()
         .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart-legend-one"))
         .unwrap();
-    let (_, second) = probe
+    let (second_handle, second) = probe
         .find_by_kind("day.container")
         .into_iter()
         .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart-legend-two"))
         .unwrap();
+    // An id names the row's own node, inside the padding and background wrappers `content`
+    // adds around it, so its frame is relative to its wrapper and the pointer cursor sits on
+    // the wrapper that covers the whole padded row. Read both through the ancestor chain.
+    let containers = probe.find_by_kind("day.container");
+    let ancestry = |handle: MockHandle| -> Vec<MockWidget> {
+        let mut chain = Vec::new();
+        let mut current = Some(handle);
+        while let Some(handle) = current {
+            chain.push(probe.widget(handle));
+            current = containers
+                .iter()
+                .find(|(_, widget)| widget.children.contains(&handle.0))
+                .map(|(parent, _)| *parent);
+        }
+        chain
+    };
+    let window_y = |chain: &[MockWidget]| chain.iter().map(|w| w.frame.origin.y).sum::<f64>();
+    let (first_chain, second_chain) = (ancestry(first_handle), ancestry(second_handle));
+    let (first_y, second_y) = (window_y(&first_chain), window_y(&second_chain));
     assert!(first.frame.size.height > 0.0);
     assert!(
-        second.frame.origin.y >= first.frame.origin.y + first.frame.size.height,
-        "legend rows must be stacked, not overlaid: {:?}, {:?}",
+        second_y >= first_y + first.frame.size.height,
+        "legend rows must be stacked, not overlaid: {:?} at y {first_y}, {:?} at y {second_y}",
         first.frame,
         second.frame
     );
-    assert_eq!(first.cursor, Some(Cursor::Pointer));
+    assert!(
+        first_chain
+            .iter()
+            .any(|widget| widget.cursor == Some(Cursor::Pointer)),
+        "a linked row shows a pointer cursor"
+    );
     probe.emit(
         NodeId(first.node),
         Event::Hover {
