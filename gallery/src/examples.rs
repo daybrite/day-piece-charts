@@ -131,7 +131,7 @@ impl Rng {
 fn randomize(seed: Signal<u64>) -> impl Piece {
     button(res::str::ex_randomize())
         .action(move || seed.update(|s| *s += 1))
-        .id("charts-randomize")
+        .id(day::id!(charts_randomize))
 }
 
 /// A row of controls above a chart.
@@ -144,7 +144,7 @@ fn choice(
     title: day::LocalizedText,
     options: &[String],
     selected: Signal<usize>,
-    id: &'static str,
+    id: day::ElementId,
 ) -> AnyPiece {
     row((
         label(title),
@@ -161,7 +161,7 @@ fn choice(
 }
 
 /// A labeled switch.
-fn switch(title: day::LocalizedText, on: Signal<bool>, id: &'static str) -> AnyPiece {
+fn switch(title: day::LocalizedText, on: Signal<bool>, id: day::ElementId) -> AnyPiece {
     row((toggle(on).id(id), label(title)))
         .spacing(6.0)
         .align(VAlign::Center)
@@ -173,7 +173,7 @@ fn amount(
     title: day::LocalizedText,
     value: Signal<f64>,
     range: std::ops::RangeInclusive<f64>,
-    id: &'static str,
+    id: day::ElementId,
 ) -> AnyPiece {
     row((label(title), slider(value).range(range).id(id).width(140.0)))
         .spacing(6.0)
@@ -186,8 +186,8 @@ fn count(
     title: day::LocalizedText,
     value: Signal<f64>,
     range: std::ops::RangeInclusive<f64>,
-    id: &'static str,
-    readout_id: &'static str,
+    id: day::ElementId,
+    readout_id: day::ElementId,
 ) -> AnyPiece {
     row((
         label(title),
@@ -207,7 +207,7 @@ fn stepper(
     title: day::LocalizedText,
     value: Signal<usize>,
     range: std::ops::RangeInclusive<usize>,
-    ids: [&'static str; 3],
+    ids: [day::ElementId; 3],
 ) -> AnyPiece {
     let (lo, hi) = (*range.start(), *range.end());
     row((
@@ -215,12 +215,12 @@ fn stepper(
         button("−")
             .action(move || value.update(|v| *v = v.saturating_sub(1).max(lo)))
             .enabled(move || value.get() > lo)
-            .id(ids[0]),
-        label(move || value.get().to_string()).id(ids[1]),
+            .id(ids[0].clone()),
+        label(move || value.get().to_string()).id(ids[1].clone()),
         button("+")
             .action(move || value.update(|v| *v = (*v + 1).min(hi)))
             .enabled(move || value.get() < hi)
-            .id(ids[2]),
+            .id(ids[2].clone()),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -324,7 +324,9 @@ fn distribution_menu(selected: Signal<usize>) -> AnyPiece {
     .collect();
     row((
         label(res::str::ex_distribution()),
-        picker(selected, names).menu().id("charts-distribution"),
+        picker(selected, names)
+            .menu()
+            .id(day::id!(charts_distribution)),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -359,7 +361,7 @@ fn curve_menu(selected: Signal<usize>) -> AnyPiece {
     .collect();
     row((
         label(res::str::ex_curve()),
-        picker(selected, names).menu().id("charts-curve"),
+        picker(selected, names).menu().id(day::id!(charts_curve)),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -394,7 +396,7 @@ fn selection_readout(selected: Signal<Option<Selection>>) -> impl Piece {
         None => res::str::ex_hover().format(),
     })
     .font(Font::Footnote)
-    .id("charts-example-value")
+    .id(day::id!(charts_example_value))
 }
 
 const MONTHS: [&str; 12] = [
@@ -449,10 +451,10 @@ fn line_chart() -> impl Piece {
                 res::str::ex_timeframe(),
                 &timeframes(),
                 frame,
-                "charts-timeframe",
+                day::id!(charts_timeframe),
             ),
             curve_menu(interp),
-            switch(res::str::ex_points(), points, "charts-points"),
+            switch(res::str::ex_points(), points, day::id!(charts_points)),
         ]),
         chart(move || {
             let revenue = monthly(seed.get(), 0);
@@ -480,7 +482,7 @@ fn line_chart() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("lines")
+        .id(day::id!(lines))
         .grow(),
         selection_readout(selected),
     ))
@@ -504,7 +506,7 @@ fn line_series() -> impl Piece {
                 res::str::ex_timeframe(),
                 &timeframes(),
                 frame,
-                "charts-timeframe",
+                day::id!(charts_timeframe),
             ),
             curve_menu(interp),
         ]),
@@ -552,7 +554,7 @@ fn line_series() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("lines-target")
+        .id(day::id!(lines_target))
         .grow(),
         selection_readout(selected),
     ))
@@ -610,7 +612,7 @@ fn area_chart() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("area")
+        .id(day::id!(area))
         .grow(),
         selection_readout(selected),
     ))
@@ -647,7 +649,7 @@ fn area_stacked() -> impl Piece {
                 res::str::ex_quarters(),
                 &COUNTS.map(|n| n.to_string()),
                 count,
-                "charts-quarters",
+                day::id!(charts_quarters),
             ),
             choice(
                 res::str::ex_stacking(),
@@ -658,7 +660,7 @@ fn area_stacked() -> impl Piece {
                     res::str::ex_stack_none().format(),
                 ],
                 stacking,
-                "charts-stacking",
+                day::id!(charts_stacking),
             ),
             curve_menu(interp),
         ]),
@@ -704,7 +706,7 @@ fn area_stacked() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("area-stacked")
+        .id(day::id!(area_stacked))
         .grow(),
         selection_readout(selected),
     ))
@@ -728,8 +730,13 @@ fn bar_chart() -> impl Piece {
     column((
         controls(vec![
             randomize(seed).any(),
-            switch(res::str::ex_sort(), sorted, "charts-sort"),
-            amount(res::str::ex_corners(), radius, 0.0..=16.0, "charts-corners"),
+            switch(res::str::ex_sort(), sorted, day::id!(charts_sort)),
+            amount(
+                res::str::ex_corners(),
+                radius,
+                0.0..=16.0,
+                day::id!(charts_corners),
+            ),
         ]),
         chart(move || {
             let s = seed.get();
@@ -758,7 +765,7 @@ fn bar_chart() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("bars")
+        .id(day::id!(bars))
         .grow(),
         selection_readout(selected),
     ))
@@ -782,9 +789,13 @@ fn bar_grouped() -> impl Piece {
                 res::str::ex_timeframe(),
                 &timeframes(),
                 frame,
-                "charts-timeframe",
+                day::id!(charts_timeframe),
             ),
-            switch(res::str::ex_stacked(), stacked, "charts-stacked-bars"),
+            switch(
+                res::str::ex_stacked(),
+                stacked,
+                day::id!(charts_stacked_bars),
+            ),
         ]),
         chart(move || {
             let (s, n) = (seed.get(), months_in(frame.get()));
@@ -822,7 +833,7 @@ fn bar_grouped() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("bars-grouped")
+        .id(day::id!(bars_grouped))
         .grow(),
         selection_readout(selected),
     ))
@@ -869,7 +880,7 @@ fn bar_normalized() -> impl Piece {
         .no_grid()
         .legend(LegendPosition::Bottom)
         .animated()
-        .id("bars-100")
+        .id(day::id!(bars_100))
         .grow(),
     ))
     .spacing(6.0)
@@ -894,7 +905,7 @@ fn bar_horizontal() -> impl Piece {
     column((
         controls(vec![
             randomize(seed).any(),
-            switch(res::str::ex_sort(), sorted, "charts-sort"),
+            switch(res::str::ex_sort(), sorted, day::id!(charts_sort)),
         ]),
         chart(move || {
             let s = seed.get();
@@ -926,7 +937,7 @@ fn bar_horizontal() -> impl Piece {
         .x_scale_kind(ScaleKind::Linear)
         .x_label("Share of respondents")
         .animated()
-        .id("bars-horizontal")
+        .id(day::id!(bars_horizontal))
         .grow(),
     ))
     .spacing(6.0)
@@ -983,9 +994,9 @@ fn pie_chart() -> impl Piece {
                 res::str::ex_slices(),
                 &slice_counts(),
                 count,
-                "charts-slices",
+                day::id!(charts_slices),
             ),
-            amount(res::str::ex_hole(), hole, 0.0..=90.0, "charts-hole"),
+            amount(res::str::ex_hole(), hole, 0.0..=90.0, day::id!(charts_hole)),
         ]),
         chart(move || slices(seed.get(), count.get() + 3))
             // `Coordinate::donut` takes the hole as a fraction of the radius, so one number walks
@@ -994,7 +1005,7 @@ fn pie_chart() -> impl Piece {
             .configure(move |c| c.coordinate = Coordinate::donut(hole.get() / 100.0))
             .legend(LegendPosition::Trailing)
             .animated()
-            .id("pie")
+            .id(day::id!(pie))
             .grow(),
     ))
     .spacing(6.0)
@@ -1049,20 +1060,24 @@ fn scatter_chart() -> impl Piece {
                 res::str::ex_count(),
                 total,
                 12.0..=1000.0,
-                "charts-count",
-                "charts-count-value",
+                day::id!(charts_count),
+                day::id!(charts_count_value),
             ),
             stepper(
                 res::str::ex_series(),
                 series,
                 1..=ALLOYS.len(),
-                ["charts-series-less", "charts-series", "charts-series-more"],
+                [
+                    day::id!(charts_series_less),
+                    day::id!(charts_series),
+                    day::id!(charts_series_more),
+                ],
             ),
             amount(
                 res::str::ex_symbol_size(),
                 size,
                 10.0..=240.0,
-                "charts-symbol-size",
+                day::id!(charts_symbol_size),
             ),
         ]),
         chart(move || {
@@ -1107,7 +1122,7 @@ fn scatter_chart() -> impl Piece {
                 .guides(Guides::CROSSHAIR),
         )
         .animated()
-        .id("scatter")
+        .id(day::id!(scatter))
         .grow(),
         selection_readout(selected),
     ))
@@ -1139,7 +1154,7 @@ fn heatmap_chart() -> impl Piece {
                     res::str::ex_palette_diverging().format(),
                 ],
                 palette,
-                "charts-palette",
+                day::id!(charts_palette),
             ),
         ]),
         chart(move || {
@@ -1191,7 +1206,7 @@ fn heatmap_chart() -> impl Piece {
         })
         .no_grid()
         .animated()
-        .id("heatmap")
+        .id(day::id!(heatmap))
         .grow(),
     ))
     .spacing(6.0)
@@ -1218,7 +1233,7 @@ fn time_chart() -> impl Piece {
     column((
         controls(vec![
             randomize(seed).any(),
-            choice(res::str::ex_range(), &ranges, range, "charts-range"),
+            choice(res::str::ex_range(), &ranges, range, day::id!(charts_range)),
         ]),
         chart(move || {
             let closes = Rng::new(seed.get(), 90).walk(52, 150.0, 260.0, 9.0);
@@ -1248,7 +1263,7 @@ fn time_chart() -> impl Piece {
                 .guides(Guides::RULE),
         )
         .animated()
-        .id("time")
+        .id(day::id!(time))
         .grow(),
         selection_readout(selected),
     ))
@@ -1332,6 +1347,6 @@ fn sparkline() -> impl Piece {
     column(rows)
         .spacing(10.0)
         .align(HAlign::Leading)
-        .id("sparkline")
+        .id(day::id!(sparkline))
         .grow_w()
 }

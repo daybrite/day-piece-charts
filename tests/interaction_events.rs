@@ -39,12 +39,12 @@ fn chart_points_populate_a_shared_data_query() {
         .plot_insets(Insets::uniform(0.0))
         .legend(LegendPosition::Hidden)
         .interact(selected.on(EventSource::Click))
-        .id("chart-fixture")
+        .id(day_core::id!(chart_fixture))
         .any()
     });
     let (_, canvas) = probe.find_by_kind("day.canvas").remove(0);
     let node =
-        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart-fixture").unwrap()).0);
+        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart_fixture").unwrap()).0);
     tap(
         &probe,
         node,
@@ -91,12 +91,12 @@ fn donut_links_hit_wedges_but_not_the_hole() {
         .plot_insets(Insets::uniform(0.0))
         .legend(LegendPosition::Hidden)
         .interact(Links::new().on_open(move |target| activated.set(target.into())))
-        .id("chart-fixture")
+        .id(day_core::id!(chart_fixture))
         .any()
     });
     let (_, canvas) = probe.find_by_kind("day.canvas").remove(0);
     let node =
-        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart-fixture").unwrap()).0);
+        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart_fixture").unwrap()).0);
     let center = Point::new(
         canvas.frame.size.width * 0.5,
         canvas.frame.size.height * 0.5,
@@ -128,12 +128,12 @@ fn drag_events_query_a_horizontal_data_interval() {
         .plot_insets(Insets::uniform(0.0))
         .legend(LegendPosition::Hidden)
         .interact(brush.brush())
-        .id("chart-fixture")
+        .id(day_core::id!(chart_fixture))
         .any()
     });
     let (_, canvas) = probe.find_by_kind("day.canvas").remove(0);
     let node =
-        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart-fixture").unwrap()).0);
+        day_core::with_tree(|t| day_core::rnode_to_id(t.find_by_id("chart_fixture").unwrap()).0);
     for (phase, x) in [
         (DragPhase::Began, 0.2),
         (DragPhase::Changed, 0.6),

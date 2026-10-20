@@ -68,5 +68,5 @@ pub fn root() -> impl Piece {
             res::str::nav_interactions(),
             rows(interactions..entries.len()),
         )
-        .id("nav")
+        .id(day::id!(nav))
 }

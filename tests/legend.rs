@@ -36,12 +36,12 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
     let (first_handle, first) = probe
         .find_by_kind("day.container")
         .into_iter()
-        .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart-legend-one"))
+        .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart_legend:one"))
         .unwrap();
     let (second_handle, second) = probe
         .find_by_kind("day.container")
         .into_iter()
-        .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart-legend-two"))
+        .find(|(_, widget)| widget.a11y.identifier.as_deref() == Some("chart_legend:two"))
         .unwrap();
     // An id names the row's own node, inside the padding and background wrappers `content`
     // adds around it, so its frame is relative to its wrapper and the pointer cursor sits on

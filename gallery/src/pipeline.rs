@@ -141,7 +141,7 @@ pub(crate) fn pipeline_page() -> impl Piece {
                     .map(|(i, name)| (i, name()))
                     .collect::<Vec<_>>(),
             )
-            .id("charts-composition-picker"),
+            .id(day::id!(charts_composition_picker)),
         ),
         // A donut needs polar coordinates, and the coordinate system is a property of the chart
         // rather than of its marks, so it lives in its own subtree and `when` swaps to it. The
@@ -155,8 +155,9 @@ pub(crate) fn pipeline_page() -> impl Piece {
                 slider(months)
                     .range(3.0..=12.0)
                     .step(1.0)
-                    .id("charts-months"),
-                label(move || month_count(months.get()).to_string()).id("charts-months-value"),
+                    .id(day::id!(charts_months)),
+                label(move || month_count(months.get()).to_string())
+                    .id(day::id!(charts_months_value)),
             ))
             .spacing(8.0),
         ),))
@@ -191,7 +192,7 @@ fn cartesian(
         // The months slider and the composition picker both change what the chart draws; each
         // change animates (README "Animation"): the window widens, bars grow, lines extend.
         .animated()
-        .id("charts-plot")
+        .id(day::id!(charts_plot))
         .grow()
 }
 
@@ -215,7 +216,7 @@ fn donut(months: Signal<f64>) -> impl Piece {
     .no_grid()
     .x_axis_hidden()
     .y_axis_hidden()
-    .id("charts-plot")
+    .id(day::id!(charts_plot))
     .grow()
 }
 
@@ -246,7 +247,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
     })
     .no_grid()
     .animated()
-    .id("charts-plot")
+    .id(day::id!(charts_plot))
     .grow()
 }
 
@@ -293,14 +294,14 @@ fn readout(
     section((
         labeled(
             res::str::fact_grammar(),
-            label(move || grammar(composition(picked.get()))).id("charts-grammar"),
+            label(move || grammar(composition(picked.get()))).id(day::id!(charts_grammar)),
         ),
         labeled(
             res::str::fact_marks(),
             label(move || {
                 mark_count(composition(picked.get()), month_count(months.get())).to_string()
             })
-            .id("charts-marks"),
+            .id(day::id!(charts_marks)),
         ),
         labeled(
             res::str::fact_series(),
@@ -311,7 +312,7 @@ fn readout(
                     .collect::<Vec<_>>()
                     .join(", ")
             })
-            .id("charts-series"),
+            .id(day::id!(charts_series)),
         ),
         labeled(
             res::str::fact_domain(),
@@ -319,11 +320,11 @@ fn readout(
                 let iv = domain(month_count(months.get()));
                 format!("{} \u{2013} {}", number(iv.lo), number(iv.hi))
             })
-            .id("charts-domain"),
+            .id(day::id!(charts_domain)),
         ),
         labeled(
             res::str::fact_ticks(),
-            label(move || tick_summary(month_count(months.get()))).id("charts-ticks"),
+            label(move || tick_summary(month_count(months.get()))).id(day::id!(charts_ticks)),
         ),
         // The one row that comes from the pointer rather than from the data: what the chart
         // reported into `selected` on the last hover, tap or drag.
@@ -341,7 +342,7 @@ fn readout(
                 ),
                 None => res::str::fact_selection_none().format(),
             })
-            .id("charts-selection"),
+            .id(day::id!(charts_selection)),
         ),
     ))
     .title(res::str::facts_section())

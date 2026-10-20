@@ -81,7 +81,7 @@ impl Entry {
         column((
             label((self.title)())
                 .font(Font::Headline)
-                .id("charts-example-title"),
+                .id(day::id!(charts_example_title)),
             (self.build)(),
         ))
         .spacing(8.0)
@@ -137,7 +137,9 @@ pub fn gallery(selected: Signal<ChartPage>) -> impl Piece {
     column((
         row((
             label(res::str::gallery_page()),
-            picker(selected, options).menu().id("charts-gallery-picker"),
+            picker(selected, options)
+                .menu()
+                .id(day::id!(charts_gallery_picker)),
         ))
         .spacing(8.0)
         .align(VAlign::Center)

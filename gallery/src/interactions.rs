@@ -114,19 +114,19 @@ fn linked() -> AnyPiece {
                 })
                 .format()
             })
-            .id("linked-count")
+            .id(day::id!(linked_count))
             .grow_w(),
             button(res::str::inter_select_sample())
                 .action(move || selected.replace(Some(Record::from_mark(&scatter()[0]))))
-                .id("linked-select-sample"),
+                .id(day::id!(linked_select_sample)),
             button(res::str::inter_reset())
                 .action(move || selected.clear())
-                .id("linked-reset"),
+                .id(day::id!(linked_reset)),
         )),
         plot(scatter)
             .interact(selected.on(EventSource::Click).toggle(Toggle::Shift))
             .condition(predicate, Visual::default(), Visual::opacity(0.16))
-            .id("linked-primary")
+            .id(day::id!(linked_primary))
             .grow(),
         plot(|| {
             scatter()
@@ -139,7 +139,7 @@ fn linked() -> AnyPiece {
         })
         .interact(selected.on(EventSource::Click).toggle(Toggle::Shift))
         .condition(other, Visual::color(categorical(1)), Visual::opacity(0.16))
-        .id("linked-secondary")
+        .id(day::id!(linked_secondary))
         .grow(),
     ))
     .spacing(8.0)
@@ -153,12 +153,12 @@ fn brushing() -> AnyPiece {
     column((
         label(res::str::inter_brush_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&counted) as f64).format())
-            .id("brush-count")
+            .id(day::id!(brush_count))
             .grow_w(),
         plot(scatter)
             .interact(brush.brush())
             .condition(predicate, Visual::default(), Visual::opacity(0.12))
-            .id("brush-source")
+            .id(day::id!(brush_source))
             .grow(),
         chart(move || {
             groups()
@@ -183,7 +183,7 @@ fn brushing() -> AnyPiece {
         .y_domain(0.0, 20.0)
         .legend(LegendPosition::Hidden)
         .animated()
-        .id("brush-histogram")
+        .id(day::id!(brush_histogram))
         .grow(),
     ))
     .spacing(8.0)
@@ -214,7 +214,7 @@ fn overview() -> AnyPiece {
             .y_domain(0.0, 100.0)
             .legend(LegendPosition::Hidden)
             .interact(range.brush())
-            .id("overview-source")
+            .id(day::id!(overview_source))
             .height(160.0)
             .grow_w(),
         chart(waveform)
@@ -223,7 +223,7 @@ fn overview() -> AnyPiece {
             .legend(LegendPosition::Hidden)
             .domain(range)
             .interact(Inspect::new(inspection))
-            .id("overview-detail")
+            .id(day::id!(overview_detail))
             .grow(),
     ))
     .spacing(8.0)
@@ -238,7 +238,7 @@ fn legend_page() -> AnyPiece {
         label(res::str::inter_legend_note()).font(Font::Caption),
         button(res::str::inter_reset())
             .action(move || selection.clear())
-            .id("legend-reset"),
+            .id(day::id!(legend_reset)),
         chart(|| {
             groups()
                 .into_iter()
@@ -250,16 +250,16 @@ fn legend_page() -> AnyPiece {
         .legend(LegendPosition::Hidden)
         .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
         .condition(predicate, Visual::default(), Visual::opacity(0.15))
-        .id("legend-donut")
+        .id(day::id!(legend_donut))
         .grow(),
         ch::legend(entries)
             .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
-            .id_prefix("interactive-legend"),
+            .entry_id(|key| day::id!(interactive_legend, key)),
         plot(scatter)
             .legend(LegendPosition::Bottom)
             .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
             .condition(other, Visual::default(), Visual::opacity(0.15))
-            .id("legend-scatter")
+            .id(day::id!(legend_scatter))
             .grow(),
     ))
     .spacing(8.0)
@@ -309,7 +309,7 @@ fn cells() -> AnyPiece {
             Visual::default(),
             Visual::opacity(0.30),
         )
-        .id("interactive-cells")
+        .id(day::id!(interactive_cells))
         .grow(),
         label(move || {
             inspection.with(|s| {
@@ -318,7 +318,7 @@ fn cells() -> AnyPiece {
                     .unwrap_or_else(|| res::str::inter_cells_note().format())
             })
         })
-        .id("cells-readout"),
+        .id(day::id!(cells_readout)),
     ))
     .spacing(8.0)
     .grow()
@@ -347,13 +347,13 @@ fn viewport() -> AnyPiece {
         row((
             button(res::str::inter_zoom_in())
                 .action(move || zoom_by(viewport, 1.5))
-                .id("viewport-zoom-in"),
+                .id(day::id!(viewport_zoom_in)),
             button(res::str::inter_zoom_out())
                 .action(move || zoom_by(viewport, 1.0 / 1.5))
-                .id("viewport-zoom-out"),
+                .id(day::id!(viewport_zoom_out)),
             button(res::str::inter_reset())
                 .action(move || viewport.clear())
-                .id("viewport-reset"),
+                .id(day::id!(viewport_reset)),
         ))
         .spacing(8.0),
         plot(scatter)
@@ -363,7 +363,7 @@ fn viewport() -> AnyPiece {
                     .snap(Snap::NearestMark)
                     .guides(Guides::CROSSHAIR),
             )
-            .id("interactive-viewport")
+            .id(day::id!(interactive_viewport))
             .grow(),
     ))
     .spacing(8.0)
@@ -379,19 +379,19 @@ fn compose() -> AnyPiece {
     column((
         label(res::str::inter_compose_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&readout) as f64).format())
-            .id("compose-count")
+            .id(day::id!(compose_count))
             .grow_w(),
         ch::legend(entries)
             .interact(series.on(EventSource::Click).toggle(Toggle::Always))
-            .id_prefix("compose-series"),
+            .entry_id(|key| day::id!(compose_series, key)),
         plot(scatter)
             .interact(brush.brush())
             .condition(intersection, Visual::default(), Visual::opacity(0.12))
-            .id("compose-intersection")
+            .id(day::id!(compose_intersection))
             .grow(),
         plot(scatter)
             .condition(union, Visual::color(categorical(1)), Visual::opacity(0.12))
-            .id("compose-union")
+            .id(day::id!(compose_union))
             .grow(),
     ))
     .spacing(8.0)
@@ -420,7 +420,7 @@ fn links() -> AnyPiece {
         .interact(links.clone())
         .interact(hover.on(EventSource::Hover))
         .condition(hover.predicate(), Visual::default(), Visual::opacity(0.20))
-        .id("interactive-links")
+        .id(day::id!(interactive_links))
         .grow(),
         ch::legend(|| {
             entries()
@@ -431,8 +431,8 @@ fn links() -> AnyPiece {
         })
         .interact(hover.on(EventSource::Hover))
         .links(links)
-        .id_prefix("link-series"),
-        label(move || res::str::inter_link_target(target.get()).format()).id("link-target"),
+        .entry_id(|key| day::id!(link_series, key)),
+        label(move || res::str::inter_link_target(target.get()).format()).id(day::id!(link_target)),
     ))
     .spacing(8.0)
     .grow()
@@ -445,15 +445,15 @@ fn filtered() -> AnyPiece {
     column((
         label(res::str::inter_filtered_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&count_query) as f64).format())
-            .id("filtered-count")
+            .id(day::id!(filtered_count))
             .grow_w(),
         plot(scatter)
             .interact(brush.brush())
-            .id("filtered-source")
+            .id(day::id!(filtered_source))
             .grow(),
         plot(scatter)
             .filter(brush.predicate())
-            .id("filtered-result")
+            .id(day::id!(filtered_result))
             .grow(),
     ))
     .spacing(8.0)
@@ -499,12 +499,13 @@ fn inputs() -> AnyPiece {
                 .enumerate()
                 .collect::<Vec<_>>(),
         )
-        .id("inputs-picker"),
-        label(move || res::str::inter_count(count(&counted) as f64).format()).id("inputs-count"),
+        .id(day::id!(inputs_picker)),
+        label(move || res::str::inter_count(count(&counted) as f64).format())
+            .id(day::id!(inputs_count)),
         plot(scatter)
             .interact(group.on(EventSource::Click))
             .condition(query, Visual::default(), Visual::opacity(0.15))
-            .id("inputs-plot")
+            .id(day::id!(inputs_plot))
             .grow(),
         ch::legend(|| {
             entries()
@@ -522,7 +523,7 @@ fn inputs() -> AnyPiece {
                 .collect()
         })
         .interact(group.on(EventSource::Click))
-        .id_prefix("input-group"),
+        .entry_id(|key| day::id!(input_group, key)),
     ))
     .spacing(8.0)
     .grow()

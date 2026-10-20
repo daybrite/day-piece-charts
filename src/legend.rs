@@ -47,7 +47,7 @@ pub struct Legend {
     entries: Entries,
     interaction: Option<PointBinding>,
     links: Links,
-    id_prefix: String,
+    entry_id: Rc<dyn Fn(&str) -> day_core::ElementId>,
 }
 /// Supply labels and detail text already localized by the application. Entries without a link
 /// remain plain text. Link activation defaults to Day's registered route / URL handling.
@@ -56,7 +56,7 @@ pub fn legend(entries: impl Fn() -> Vec<LegendEntry> + 'static) -> Legend {
         entries: Rc::new(entries),
         interaction: None,
         links: Links::new(),
-        id_prefix: "chart-legend".into(),
+        entry_id: Rc::new(|key| day_core::id!(chart_legend, key)),
     }
 }
 #[day_pieces::builder(LegendBuilder)]
@@ -71,9 +71,9 @@ impl Legend {
         self.links = links;
         self
     }
-    /// Each entry is addressable as `<prefix>-<stable key>` in accessibility and DayScript.
-    pub fn id_prefix(mut self, prefix: impl Into<String>) -> Self {
-        self.id_prefix = prefix.into();
+    /// Declare a stable keyed identity for each entry.
+    pub fn entry_id(mut self, id: impl Fn(&str) -> day_core::ElementId + 'static) -> Self {
+        self.entry_id = Rc::new(id);
         self
     }
 }
@@ -82,7 +82,7 @@ impl Piece for Legend {
         let entries = self.entries;
         let interaction = self.interaction;
         let handler = self.links.handler;
-        let prefix = self.id_prefix;
+        let prefix = self.entry_id;
         column((each(
             items(move || entries(), |entry| entry.key.clone()),
             move |slot| {
@@ -181,7 +181,7 @@ impl Piece for Legend {
                             .a11y(|b| b.role(Role::Button))
                             .id_of({
                                 let prefix = prefix.clone();
-                                move || format!("{prefix}-{}", slot.field(|e| e.key.clone()))
+                                move || prefix(&slot.field(|e| e.key.clone()))
                             })
                     },
                 )
@@ -215,7 +215,7 @@ impl Piece for Legend {
                         })
                         .id_of({
                             let prefix = plain_prefix.clone();
-                            move || format!("{prefix}-{}", slot.field(|e| e.key.clone()))
+                            move || prefix(&slot.field(|e| e.key.clone()))
                         })
                 })
             },
