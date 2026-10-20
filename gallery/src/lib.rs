@@ -130,50 +130,21 @@ pub fn page(page: ChartPage) -> AnyPiece {
 /// so it can remember or deep-link it.
 pub fn gallery(selected: Signal<ChartPage>) -> impl Piece {
     register();
-    let entries = pages();
-    let names: Vec<String> = entries.iter().map(|e| (e.title)().format()).collect();
-    let keys: Vec<ChartPage> = entries.iter().map(|e| e.page).collect();
-    // The picker speaks indices; the host's signal speaks pages. The index is derived from the
-    // page on every read, so a host that sets the page (a deep link) moves the picker too.
-    let index = Signal::new(
-        keys.iter()
-            .position(|k| *k == selected.get_untracked())
-            .unwrap_or(0),
-    );
-    {
-        let keys = keys.clone();
-        Effect::new(move || {
-            let i = index.get();
-            if let Some(k) = keys.get(i).copied()
-                && untrack(|| selected.get()) != k
-            {
-                selected.set(k);
-            }
-        });
-    }
-    Effect::new(move || {
-        let k = selected.get();
-        if let Some(i) = keys.iter().position(|p| *p == k)
-            && untrack(|| index.get()) != i
-        {
-            index.set(i);
-        }
-    });
+    // The picker is bound to the host's page signal itself, so a host that sets the page (a
+    // deep link) moves the picker too.
+    let options: Vec<(ChartPage, day::LocalizedText)> =
+        pages().iter().map(|e| (e.page, (e.title)())).collect();
     column((
         row((
             label(res::str::gallery_page()),
-            picker(names, index).menu().id("charts-gallery-picker"),
+            picker(selected, options).menu().id("charts-gallery-picker"),
         ))
         .spacing(8.0)
         .align(VAlign::Center)
         .padding(16.0),
-        // One row keyed by the open page's route: a new page replaces the old one, so each page
+        // One subtree keyed by the open page: a new page replaces the old one, so each page
         // starts from its own first state, and the old page's signals go with its scope.
-        each(
-            items(move || vec![selected.get()], |p: &ChartPage| p.key()),
-            |slot| page(slot.get()),
-        )
-        .grow(),
+        keyed(move || Some(selected.get()), |p| page(*p)).grow(),
     ))
     .grow()
 }

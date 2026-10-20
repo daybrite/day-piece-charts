@@ -134,11 +134,12 @@ pub(crate) fn pipeline_page() -> impl Piece {
         labeled(
             res::str::composition(),
             picker(
+                picked,
                 COMPOSITION_LABELS
                     .iter()
-                    .map(|name| name().format())
+                    .enumerate()
+                    .map(|(i, name)| (i, name()))
                     .collect::<Vec<_>>(),
-                picked,
             )
             .id("charts-composition-picker"),
         ),

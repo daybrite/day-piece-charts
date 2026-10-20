@@ -136,7 +136,7 @@ fn randomize(seed: Signal<u64>) -> impl Piece {
 
 /// A row of controls above a chart.
 fn controls(items: Vec<AnyPiece>) -> impl Piece {
-    row(PieceVec(items)).spacing(12.0).align(VAlign::Center)
+    row(items).spacing(12.0).align(VAlign::Center)
 }
 
 /// A segmented picker over `options`, labeled.
@@ -148,7 +148,12 @@ fn choice(
 ) -> AnyPiece {
     row((
         label(title),
-        picker(options.to_vec(), selected).segmented().id(id),
+        picker(
+            selected,
+            options.iter().cloned().enumerate().collect::<Vec<_>>(),
+        )
+        .segmented()
+        .id(id),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -306,7 +311,7 @@ impl Distribution {
 }
 
 fn distribution_menu(selected: Signal<usize>) -> AnyPiece {
-    let names: Vec<String> = [
+    let names: Vec<_> = [
         res::str::ex_dist_trend(),
         res::str::ex_dist_uniform(),
         res::str::ex_dist_normal(),
@@ -315,11 +320,11 @@ fn distribution_menu(selected: Signal<usize>) -> AnyPiece {
         res::str::ex_dist_fan(),
     ]
     .into_iter()
-    .map(|t| t.format())
+    .enumerate()
     .collect();
     row((
         label(res::str::ex_distribution()),
-        picker(names, selected).menu().id("charts-distribution"),
+        picker(selected, names).menu().id("charts-distribution"),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -340,7 +345,7 @@ const CURVES: [Interpolation; 7] = [
 /// The curve menu: every interpolation the crate draws. A curve is a way of drawing the same
 /// data, not new data, so changing it redraws the path in place rather than animating values.
 fn curve_menu(selected: Signal<usize>) -> AnyPiece {
-    let names: Vec<String> = [
+    let names: Vec<_> = [
         res::str::ex_curve_linear(),
         res::str::ex_curve_monotone(),
         res::str::ex_curve_catmull(),
@@ -350,11 +355,11 @@ fn curve_menu(selected: Signal<usize>) -> AnyPiece {
         res::str::ex_curve_step_end(),
     ]
     .into_iter()
-    .map(|t| t.format())
+    .enumerate()
     .collect();
     row((
         label(res::str::ex_curve()),
-        picker(names, selected).menu().id("charts-curve"),
+        picker(selected, names).menu().id("charts-curve"),
     ))
     .spacing(6.0)
     .align(VAlign::Center)
@@ -1324,7 +1329,7 @@ fn sparkline() -> impl Piece {
             .any(),
         );
     }
-    column(PieceVec(rows))
+    column(rows)
         .spacing(10.0)
         .align(HAlign::Leading)
         .id("sparkline")

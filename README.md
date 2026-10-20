@@ -989,7 +989,7 @@ fn sparkline() -> impl Piece {
             .any(),
         );
     }
-    column(PieceVec(rows))
+    column(rows)
         .spacing(10.0)
         .align(HAlign::Leading)
         .id("sparkline")

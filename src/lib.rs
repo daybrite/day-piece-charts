@@ -68,7 +68,7 @@ pub mod render;
 pub mod resolve;
 pub mod scale;
 pub mod select;
-pub use legend::{Legend, LegendEntry, legend};
+pub use legend::{Legend, LegendBuilder, LegendEntry, legend};
 pub use select::{Guides, Selection, Snap};
 pub mod style;
 pub mod ticks;
@@ -91,7 +91,7 @@ use std::rc::Rc;
 use day_core::frame::{FrameClock, FrameHandle};
 use day_core::tween::{Timing, animate};
 use day_core::{BuildCx, Piece, RNode};
-use day_pieces::{Draw, TextStyle};
+use day_pieces::{Decorated, Draw, IntoText, TextStyle};
 use day_reactive::Signal;
 use day_spec::props::TextAlign;
 use day_spec::{AnimSpec, CanvasFont, Color, Point, Rect, Shape, Size, TextAnchor, TextVAlign};
@@ -176,6 +176,7 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
     }
 }
 
+#[day_pieces::builder(ChartBuilder)]
 impl Chart {
     /// Bind an event-driven inspection, point query, brush, viewport or link interaction.
     /// Several bindings can coexist; shared parameters coordinate independent views.
@@ -351,13 +352,15 @@ impl Chart {
     }
     /// Name the x axis (`.chartXAxisLabel`). An axis with no name drawn is the default; a data
     /// column's label is not used as one, because under labels already reading `C1 C2 C3` a
-    /// title saying "Category" is noise.
-    pub fn x_label(mut self, t: impl Into<String>) -> Self {
-        self.x_axis.title = Some(t.into());
+    /// title saying "Category" is noise. Takes what [`label`](day_pieces::prelude::label)
+    /// takes (a `&str`, a `LocalizedText`, a signal), resolved when the chart is built.
+    pub fn x_label<M>(mut self, t: impl IntoText<M>) -> Self {
+        self.x_axis.title = Some(t.into_text().initial());
         self
     }
-    pub fn y_label(mut self, t: impl Into<String>) -> Self {
-        self.y_axis.title = Some(t.into());
+    /// Name the y axis; see [`x_label`](Self::x_label).
+    pub fn y_label<M>(mut self, t: impl IntoText<M>) -> Self {
+        self.y_axis.title = Some(t.into_text().initial());
         self
     }
     /// How many x labels to aim for. The tick search treats it as a target to score, not a promise.

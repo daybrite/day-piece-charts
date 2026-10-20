@@ -285,7 +285,11 @@ fn cells() -> AnyPiece {
                         .foreground(sequential(n as f64 / 24.0))
                         .corner_radius(4.0)
                         .selection_value(value(
-                            res::str::inter_cell(y as f64 + 1.0, n as f64).format(),
+                            res::str::inter_cell(res::str::InterCell {
+                                band: y as f64 + 1.0,
+                                count: n as f64,
+                            })
+                            .format(),
                             n,
                         ))
                     })
@@ -489,10 +493,11 @@ fn inputs() -> AnyPiece {
     column((
         label(res::str::inter_inputs_note()).font(Font::Caption),
         picker(
+            picked,
             std::iter::once(res::str::inter_all_groups().format())
                 .chain(groups())
+                .enumerate()
                 .collect::<Vec<_>>(),
-            picked,
         )
         .id("inputs-picker"),
         label(move || res::str::inter_count(count(&counted) as f64).format()).id("inputs-count"),

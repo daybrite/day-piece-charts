@@ -5,17 +5,15 @@ use day_piece_charts::Insets;
 use day_piece_charts::{self as ch, *};
 use day_pieces::prelude::*;
 use day_reactive::{Signal, flush_sync};
-use day_spec::{DragPhase, Event, NodeId, Point, Size, WindowOptions};
+use day_spec::{DragPhase, Event, NodeId, Point, WindowOptions};
 fn boot(root: impl FnOnce() -> AnyPiece + 'static) -> MockProbe {
     day_core::uninstall_tree();
     let (mock, probe) = MockToolkit::new();
     day_core::launch_with(
         mock,
-        WindowOptions {
-            title: "Interaction fixture".into(),
-            size: Size::new(400.0, 300.0),
-            ..Default::default()
-        },
+        WindowOptions::default()
+            .title("Interaction fixture")
+            .size(400.0, 300.0),
         root,
     );
     probe

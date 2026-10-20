@@ -28,12 +28,7 @@ day::resources!();
 
 /// The window every entry point opens.
 pub fn window() -> day::WindowOptions {
-    day::WindowOptions {
-        locales: Some((res::locales::DEFAULT, res::locales::CATALOG)),
-        title_fn: Some(|| res::str::app_title().format()),
-        size: day::prelude::Size::new(480.0, 800.0),
-        ..Default::default()
-    }
+    res::window_options().size(480.0, 800.0)
 }
 
 /// The whole app: a sidebar of the gallery's pages, and whichever is open.
@@ -44,20 +39,34 @@ pub fn root() -> impl Piece {
     // URL hash on web-dom, `DAY_DEEPLINK` elsewhere), and the browser's back button writes it
     // again.
     let page = Signal::new(ChartPage::Pipeline);
-    let mut nav = nav(page)
-        .style(NavStyle::Sidebar)
-        .title(res::str::app_title());
     // The pipeline page under "This demo", then the examples in the order the README documents
-    // them. Each row's page is the gallery's, under its own route key, so a screenshot, a route
-    // and the chart's id are all one name.
-    for entry in gallery::pages() {
-        match entry.page {
-            ChartPage::Pipeline => nav = nav.section(res::str::nav_demo()),
-            ChartPage::Lines => nav = nav.section(res::str::nav_examples()),
-            ChartPage::Linked => nav = nav.section(res::str::nav_interactions()),
-            _ => {}
-        }
-        nav = nav.item(entry.page, (entry.title)(), move || entry.build());
-    }
-    nav.id("nav")
+    // them, then the interactions. Each row's page is the gallery's, under its own route key, so
+    // a screenshot, a route and the chart's id are all one name.
+    let entries = gallery::pages();
+    let starts = |p: ChartPage| {
+        entries
+            .iter()
+            .position(|e| e.page == p)
+            .unwrap_or(entries.len())
+    };
+    let (examples, interactions) = (starts(ChartPage::Lines), starts(ChartPage::Linked));
+    let rows = |range: std::ops::Range<usize>| -> Vec<NavItem<ChartPage>> {
+        entries[range]
+            .iter()
+            .map(|entry| {
+                let entry = *entry;
+                item(entry.page, (entry.title)()).page(move || entry.build())
+            })
+            .collect()
+    };
+    nav(page)
+        .style(NavStyle::Sidebar)
+        .title(res::str::app_title())
+        .section(res::str::nav_demo(), rows(0..examples))
+        .section(res::str::nav_examples(), rows(examples..interactions))
+        .section(
+            res::str::nav_interactions(),
+            rows(interactions..entries.len()),
+        )
+        .id("nav")
 }

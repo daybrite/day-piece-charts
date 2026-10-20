@@ -59,6 +59,7 @@ pub fn legend(entries: impl Fn() -> Vec<LegendEntry> + 'static) -> Legend {
         id_prefix: "chart-legend".into(),
     }
 }
+#[day_pieces::builder(LegendBuilder)]
 impl Legend {
     /// Bind this legend to the same projected point parameter used by charts.
     pub fn interact(mut self, interaction: PointBinding) -> Self {

@@ -6,7 +6,7 @@ use day_piece_charts::{
 };
 use day_pieces::prelude::*;
 use day_reactive::{Signal, flush_sync};
-use day_spec::{Cursor, DragPhase, Event, NodeId, Point, Size, WindowOptions};
+use day_spec::{Cursor, DragPhase, Event, NodeId, Point, WindowOptions};
 
 #[test]
 fn linked_legend_registers_activation_and_hover_emphasis() {
@@ -17,11 +17,9 @@ fn linked_legend_registers_activation_and_hover_emphasis() {
     let entries = Signal::new(Vec::new());
     day_core::launch_with(
         mock,
-        WindowOptions {
-            title: "Legend fixture".into(),
-            size: Size::new(400.0, 300.0),
-            ..Default::default()
-        },
+        WindowOptions::default()
+            .title("Legend fixture")
+            .size(400.0, 300.0),
         move || {
             legend(move || entries.get())
                 .interact(highlighted.on(EventSource::Hover))
