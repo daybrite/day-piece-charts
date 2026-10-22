@@ -1,4 +1,4 @@
-# The gallery walkthrough (https://daybrite.dev/docs/dayscript): every chart the crate's README
+# The gallery walkthrough (https://daybrite.dev/docs/how-to/dayscript): every chart the crate's README
 # documents, opened by its own route and captured under that same name. CI runs it on all eight
 # primary platform-toolkit pairs, and the same command runs it here:
 #

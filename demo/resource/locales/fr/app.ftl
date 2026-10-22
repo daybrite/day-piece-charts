@@ -1,4 +1,4 @@
-# Chaînes de l'interface de Charts Demo (https://daybrite.dev/docs/localization).
+# Chaînes de l'interface de Charts Demo (https://daybrite.dev/docs/how-to/localization).
 
 app_title = Charts Demo
 

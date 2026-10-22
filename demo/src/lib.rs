@@ -27,7 +27,7 @@ use day_piece_charts_gallery::{self as gallery, ChartPage};
 // src/main.rs.
 day::day_start!(options: window(), root);
 
-// Typed constants for everything under `resource/` (https://daybrite.dev/docs/resources).
+// Typed constants for everything under `resource/` (https://daybrite.dev/docs/how-to/resources).
 day::resources!();
 
 /// The window every entry point opens.

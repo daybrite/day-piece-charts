@@ -1,4 +1,4 @@
-# The demo's walkthrough (https://daybrite.dev/docs/dayscript), and the crate's test on a real
+# The demo's walkthrough (https://daybrite.dev/docs/how-to/dayscript), and the crate's test on a real
 # toolkit: it runs on the iOS Simulator, the Android emulator, and a headless browser in CI, and
 # the same commands run it here.
 #

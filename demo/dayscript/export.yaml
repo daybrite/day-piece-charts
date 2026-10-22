@@ -1,4 +1,4 @@
-# Canvas export (https://daybrite.dev/docs/canvas "Exporting"): the open page's charts saved as a
+# Canvas export (https://daybrite.dev/docs/reference/canvas "Exporting"): the open page's charts saved as a
 # PNG and a PDF, through the toolkit's own painter, from a chart's context menu and from the File
 # menu. Scripted runs answer the save dialog with a path under the app's temp directory, so the
 # bytes are really written.

@@ -1,4 +1,4 @@
-# The day-piece-charts gallery's strings: a private catalog (https://daybrite.dev/docs/localization
+# The day-piece-charts gallery's strings: a private catalog (https://daybrite.dev/docs/how-to/localization
 # "Private catalogs"), so every app that mounts the pages reads them without installing them.
 
 nav_pipeline = Pipeline

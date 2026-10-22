@@ -13,7 +13,7 @@ publish = false
 # code, so the two can never drift apart.
 #
 # A library of pages rather than an app: no window, no backend features, and its strings in a
-# private catalog (resource/locales, https://daybrite.dev/docs/localization "Private catalogs"),
+# private catalog (resource/locales, https://daybrite.dev/docs/how-to/localization "Private catalogs"),
 # so they resolve in whichever app mounts it without that app installing them. Like the chart
 # crate, every day dependency names the bare canonical URL so the app's Cargo.lock picks one day
 # revision for the whole graph.
