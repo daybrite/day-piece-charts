@@ -552,27 +552,28 @@ mod tests {
     /// 2026-03-05T15:30:15Z.
     const T: f64 = 1_772_724_615.0;
 
-    /// With CLDR's no-break spaces folded to plain ones.
-    fn label(locale: &str, span: f64) -> String {
-        time_label_in(locale, T, span).replace(['\u{a0}', '\u{202f}'], " ")
-    }
-
     #[test]
     fn a_time_axis_writes_dates_the_locales_way_at_its_spans_precision() {
-        let (hours, weeks, year, decade) = (6.0 * HOUR, 8.0 * 7.0 * DAY, 365.0 * DAY, 3650.0 * DAY);
-        assert_eq!(label("en", 30.0), "3:30:15 PM");
-        assert_eq!(label("en", hours), "3:30 PM");
-        assert_eq!(label("en", weeks), "Mar 5");
-        assert_eq!(label("en", year), "Mar 2026");
-        assert_eq!(label("en", decade), "2026");
+        use day_l10n::DateFields;
 
-        assert_eq!(label("fr", 30.0), "15:30:15");
-        assert_eq!(label("fr", hours), "15:30");
-        assert_eq!(label("fr", weeks), "5 mars");
-        assert_eq!(label("fr", year), "mars 2026");
-        assert_eq!(label("fr", decade), "2026");
-
-        assert_eq!(label("de", weeks), "05.03.");
-        assert_eq!(label("ja", year), "2026/03");
+        // The chart chooses the fields; Day's formatter owns their locale-specific spelling.
+        // ICU/CLDR updates can change that spelling (German MonthDay changed from "05.03."
+        // to "5. März" in ICU 2.4), so test against the formatter resolved by this build.
+        let cases = [
+            (30.0, DateFields::HourMinuteSecond),
+            (6.0 * HOUR, DateFields::HourMinute),
+            (8.0 * 7.0 * DAY, DateFields::MonthDay),
+            (365.0 * DAY, DateFields::YearMonth),
+            (3650.0 * DAY, DateFields::Year),
+        ];
+        for locale in ["en", "fr", "de", "ja"] {
+            for (span, fields) in cases {
+                assert_eq!(
+                    time_label_in(locale, T, span),
+                    day_l10n::format_date_in(locale, T, fields),
+                    "locale {locale}, span {span}, fields {fields:?}",
+                );
+            }
+        }
     }
 }
