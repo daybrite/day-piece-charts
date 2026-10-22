@@ -205,6 +205,37 @@ The tweening itself is Day's (`day::tween`: `Lerp`, `Timing`, `animate`, `Tweene
 machinery is there for any other canvas. Every page of the demo has controls (Randomize data, a
 timeframe, a sort, a slice count, a date range) that exercise these transitions.
 
+### Export
+
+A chart can be saved as a PNG or a PDF. Day records the chart's drawing and replays it offscreen
+with the toolkit's own painter ([Day's canvas export](https://daybrite.dev/docs/canvas)), so the
+file looks like the chart on screen. Wrap the charts you want to export in a `ChartExports`, then
+ask it for bytes:
+
+```rust
+use day_piece_charts::ChartExports;
+
+let exports = ChartExports::new().context_menu(move || export_items()); // each chart's menu
+exports.around(|| column((sales_chart(), margin_chart())))
+
+// from a menu command:
+day::task(async move {
+    if let Ok(png) = exports.png(2.0).await { /* save_file(png)… */ }   // the charts stacked
+    if let Ok(pdf) = exports.pdf("Q3").await { /* … */ }                 // one page per chart
+});
+```
+
+An export is a still: each chart at the size it last had on screen, at its final state with no
+transition in flight and no pointer guides, in light chrome on white. PNG works wherever Day
+renders canvas bitmaps, which is every target but Windows (WinUI). PDF needs the platform's own
+PDF writer, which macOS, iOS, GTK, Qt and Android have and HarmonyOS, the web and WinUI do not.
+Check `day::canvas_exports()` and disable the commands the target cannot run.
+
+The gallery does all of this for its pages: every chart's context menu has Export as PNG and
+Export as PDF, `gallery()` shows the same two as buttons, and
+`day_piece_charts_gallery::export_menu_items(page)` gives a host the items for its own menu bar,
+which is where the Charts Demo puts them (File menu).
+
 ## Examples
 
 Each chart below is a page of the [demo app](demo/), shown with the code that draws it and a

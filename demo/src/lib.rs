@@ -15,6 +15,10 @@
 //! chart and the browser's back button walks the pages, and it is the name `dayscript`'s
 //! `navigate:` step uses, which is how both walkthroughs move between charts. Every element carries
 //! a stable id, so they can assert what is on the page as well as reach it.
+//!
+//! File ▸ Export as PNG and File ▸ Export as PDF render the open page's charts through the
+//! toolkit's own painter (README "Export"); each chart's context menu offers the same two. Both
+//! items are present on every target and enabled where the toolkit renders that format.
 
 use day::prelude::*;
 use day_piece_charts_gallery::{self as gallery, ChartPage};
@@ -39,6 +43,17 @@ pub fn root() -> impl Piece {
     // URL hash on web-dom, `DAY_DEEPLINK` elsewhere), and the browser's back button writes it
     // again.
     let page = Signal::new(ChartPage::Pipeline);
+    // The menu bar's File menu carries the gallery's export commands for whichever page is open.
+    // On a target with no menu bar the charts' context menus carry them alone.
+    app_menu(move || {
+        vec![
+            sub_menu(
+                res::str::day_file(),
+                gallery::export_menu_items(move || page.get_untracked()),
+            )
+            .bar_role(MenuBarRole::File),
+        ]
+    });
     // The pipeline page under "This demo", then the examples in the order the README documents
     // them, then the interactions. Each row's page is the gallery's, under its own route key, so
     // a screenshot, a route and the chart's id are all one name.

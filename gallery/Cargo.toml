@@ -23,5 +23,11 @@ day = { git = "https://github.com/daybrite/day.git" }
 day-fluent = { git = "https://github.com/daybrite/day.git" }
 day-piece-charts = { path = ".." }
 
+[dev-dependencies]
+day-core = { git = "https://github.com/daybrite/day.git" }
+day-mock = { git = "https://github.com/daybrite/day.git" }
+day-spec = { git = "https://github.com/daybrite/day.git" }
+day-reactive = { git = "https://github.com/daybrite/day.git" }
+
 [build-dependencies]
 day-build = { git = "https://github.com/daybrite/day.git" }

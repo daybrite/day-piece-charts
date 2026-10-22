@@ -130,3 +130,10 @@ inter_inputs = Input-bound selections
 inter_filtered_note = Brush the top view. The bottom view filters its data through the same query while preserving the original axes. Click or tap outside the selected area to clear it.
 inter_inputs_note = Choose a group in the picker, chart or legend. A field-projected query keeps all three controls synchronized.
 inter_all_groups = All groups
+
+# Export (README "Export"): the menu and context-menu commands, and the status line under each page's title.
+export_png = Export as PNG
+export_pdf = Export as PDF
+export_saved = Saved { $name }
+export_canceled = Export canceled
+export_failed = Export failed: { $reason }

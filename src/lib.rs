@@ -56,6 +56,7 @@ pub mod animate;
 pub mod axis;
 pub mod coord;
 pub mod data;
+mod export;
 pub mod interaction;
 pub mod layout;
 pub mod legend;
@@ -77,6 +78,7 @@ pub use axis::{AxisPosition, AxisSpec, LegendPosition};
 pub use coord::Coordinate;
 pub use data::{Datum, Interval, IntoDatum, Value, date, parse_iso_date, time, value};
 pub use day_spec::{LineCap, LineJoin};
+pub use export::ChartExports;
 pub use layout::Insets;
 pub use mark::{
     Annotation, AnnotationPosition, Dimension, Interpolation, Mark, MarkKind, MarkStyle, Stacking,
@@ -712,6 +714,180 @@ pub struct ChartConfig {
     pub coordinate: Coordinate,
 }
 
+/// What a chart draws from, shared by the live canvas and by export: everything [`Chart`] was
+/// configured with except its interactions and its motion.
+struct Spec {
+    marks: Rc<dyn Fn() -> Vec<Mark>>,
+    x_scale: ScaleSpec,
+    y_scale: ScaleSpec,
+    x_axis: AxisSpec,
+    y_axis: AxisSpec,
+    coordinate: Coordinate,
+    legend: LegendPosition,
+    chrome: Option<Chrome>,
+    label_size: f64,
+    font: CanvasFont,
+    colors: SeriesColors,
+    plot_insets: Option<Insets>,
+    x_domain_fn: Option<DomainFn>,
+    y_domain_fn: Option<DomainFn>,
+    configure_fn: Option<ConfigureFn>,
+    conditions: Vec<interaction::Condition>,
+    filter: Option<Predicate>,
+    domain: Option<IntervalSelection>,
+}
+
+/// One size's worth of the pipeline: the chart resolved for `size`, the legend that took its
+/// space first, and the axes and chrome the paint reads.
+struct Prepared {
+    target: resolve::Resolved,
+    series: Vec<(String, Color)>,
+    legend: Option<LegendBox>,
+    x_axis: AxisSpec,
+    y_axis: AxisSpec,
+    chrome: Chrome,
+}
+
+impl Spec {
+    /// Run the pipeline for `size`: marks, filter, domains, configuration, legend, resolve.
+    /// Every read here is tracked when the caller tracks, which is how the live chart follows
+    /// its signals; an export calls it untracked.
+    fn prepare(&self, size: Size, chrome: Chrome) -> Prepared {
+        let mut ms = (self.marks)();
+        if let Some(predicate) = &self.filter {
+            ms.retain(|mark| predicate.matches(mark));
+        }
+        // A domain closure is read here, inside the binding, so the scale follows the same
+        // signals the marks do.
+        let mut x_scale = self.x_scale.clone();
+        if let Some(f) = &self.x_domain_fn {
+            x_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+        }
+        let mut y_scale = self.y_scale.clone();
+        if let Some(f) = &self.y_domain_fn {
+            y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
+        }
+        // Read inside the binding, so every signal the closure touches re-records the chart.
+        let mut x_axis = self.x_axis.clone();
+        let mut y_axis = self.y_axis.clone();
+        let mut coordinate = self.coordinate;
+        if let Some(f) = &self.configure_fn {
+            let mut cfg = ChartConfig {
+                x_scale,
+                y_scale,
+                x_axis,
+                y_axis,
+                coordinate,
+            };
+            f(&mut cfg);
+            x_scale = cfg.x_scale;
+            y_scale = cfg.y_scale;
+            x_axis = cfg.x_axis;
+            y_axis = cfg.y_axis;
+            coordinate = cfg.coordinate;
+        }
+
+        if let Some(parameter) = self.domain {
+            if parameter.axes.x()
+                && let Some((lo, hi)) = parameter.x_domain()
+            {
+                x_scale.domain = Some(Interval::new(lo, hi));
+            }
+            if parameter.axes.y()
+                && let Some((lo, hi)) = parameter.y_domain()
+            {
+                y_scale.domain = Some(Interval::new(lo, hi));
+            }
+        }
+        // The legend is measured first: it takes its space out of the pane before the plot
+        // rectangle is computed, so the two can never overlap.
+        let series: Vec<(String, Color)> = {
+            let mut seen: Vec<String> = Vec::new();
+            for m in &ms {
+                if let Some(s) = &m.series {
+                    let k = s.datum.to_string();
+                    if !seen.contains(&k) {
+                        seen.push(k);
+                    }
+                }
+            }
+            seen.iter()
+                .enumerate()
+                .map(|(i, s)| (s.clone(), (self.colors)(i, s)))
+                .collect()
+        };
+        let legend = legend_layout(&series, self.legend, size, self.label_size, &self.font);
+        let legend_insets = legend.as_ref().map(|l| l.insets).unwrap_or_default();
+
+        let cfg = resolve::Config {
+            x_scale: &x_scale,
+            y_scale: &y_scale,
+            x_axis: &x_axis,
+            y_axis: &y_axis,
+            coordinate,
+            series_colors: &*self.colors,
+            label_size: self.label_size,
+            font: self.font.clone(),
+            legend_insets,
+            plot_insets: self.plot_insets,
+        };
+        let target = resolve::resolve(ms, size, &cfg);
+        Prepared {
+            target,
+            series,
+            legend,
+            x_axis,
+            y_axis,
+            chrome,
+        }
+    }
+
+    fn paint<'a>(&'a self, prepared: &'a Prepared) -> render::Paint2<'a> {
+        render::Paint2 {
+            chrome: &prepared.chrome,
+            label_size: self.label_size,
+            font: self.font.clone(),
+            x_axis: &prepared.x_axis,
+            y_axis: &prepared.y_axis,
+            series_colors: &*self.colors,
+        }
+    }
+
+    /// Draw `resolved` (the target, or a frame of a transition toward it) with its
+    /// conditional emphasis and its legend, and hand back the legend's hit regions.
+    fn draw(
+        &self,
+        d: &mut Draw,
+        prepared: &Prepared,
+        resolved: &resolve::Resolved,
+        interactions: &[Interaction],
+    ) -> Vec<select::HitMark> {
+        let paint = self.paint(prepared);
+        let emphasized = if self.conditions.is_empty() {
+            None
+        } else {
+            let mut painted = resolved.clone();
+            for mark in &mut painted.marks {
+                for condition in &self.conditions {
+                    let visual = if condition.predicate.matches(&mark.mark) {
+                        condition.selected
+                    } else {
+                        condition.other
+                    };
+                    visual.apply(&mut mark.mark);
+                }
+            }
+            Some(painted)
+        };
+        render::draw(d, emphasized.as_ref().unwrap_or(resolved), &paint);
+        if let Some(lb) = &prepared.legend {
+            draw_legend(d, &prepared.series, lb, resolved.plot, &paint, interactions)
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 impl Piece for Chart {
     fn build(self, cx: &mut BuildCx) -> RNode {
         let Chart {
@@ -737,6 +913,26 @@ impl Piece for Chart {
             transition,
             appear,
         } = self;
+        let spec = Rc::new(Spec {
+            marks,
+            x_scale,
+            y_scale,
+            x_axis,
+            y_axis,
+            coordinate,
+            legend,
+            chrome,
+            label_size,
+            font,
+            colors,
+            plot_insets,
+            x_domain_fn,
+            y_domain_fn,
+            configure_fn,
+            conditions,
+            filter,
+            domain,
+        });
 
         // The transition in flight, if any (README "Animation"). The draw closure starts one when
         // the resolved chart changes, a display-frame subscription advances it, and each frame's
@@ -790,100 +986,47 @@ impl Piece for Chart {
         let bindings_need_viewport = interactions
             .iter()
             .any(|b| matches!(b, Interaction::Viewport(_)));
+        // Under a `ChartExports` (README "Export"), the chart registers a still of itself: the
+        // same pipeline, at the size it last drew, without the transition or the pointer's
+        // guides. Its context menu offers whatever the exports' owner put there.
+        let exports = day_core::environment::<ChartExports>();
+        let shown_size: Rc<std::cell::Cell<Option<Size>>> = Rc::default();
+        if let Some(exports) = &exports {
+            let spec = spec.clone();
+            let bindings = interactions.clone();
+            exports.register(
+                shown_size.clone(),
+                Rc::new(move |d: &mut Draw, size: Size, dark: bool| {
+                    let chrome = spec
+                        .chrome
+                        .clone()
+                        .unwrap_or_else(|| Chrome::for_dark(dark));
+                    let prepared = spec.prepare(size, chrome);
+                    spec.draw(d, &prepared, &prepared.target, &bindings);
+                }),
+            );
+        }
+        let spec_draw = spec.clone();
+        let shown_draw = shown_size.clone();
         let mut piece =
             day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
                 if size.width <= 2.0 || size.height <= 2.0 {
                     return;
                 }
+                shown_draw.set(Some(size));
+                let spec = &spec_draw;
                 // Tracked inside the binding, so a light/dark switch re-records without the app
                 // rebuilding the chart.
-                let ch = chrome
+                let ch = spec
+                    .chrome
                     .clone()
                     .unwrap_or_else(|| Chrome::for_dark(day_core::dark_mode()));
-                let mut ms = (marks)();
-                if let Some(predicate) = &filter {
-                    ms.retain(|mark| predicate.matches(mark));
-                }
-                // A domain closure is read here, inside the binding, so the scale follows the same
-                // signals the marks do.
-                let mut x_scale = x_scale.clone();
-                if let Some(f) = &x_domain_fn {
-                    x_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
-                }
-                let mut y_scale = y_scale.clone();
-                if let Some(f) = &y_domain_fn {
-                    y_scale.domain = f().map(|(lo, hi)| Interval::new(lo, hi));
-                }
-                // Read inside the binding, so every signal the closure touches re-records the chart.
-                let mut x_axis = x_axis.clone();
-                let mut y_axis = y_axis.clone();
-                let mut coordinate = coordinate;
-                if let Some(f) = &configure_fn {
-                    let mut cfg = ChartConfig {
-                        x_scale,
-                        y_scale,
-                        x_axis,
-                        y_axis,
-                        coordinate,
-                    };
-                    f(&mut cfg);
-                    x_scale = cfg.x_scale;
-                    y_scale = cfg.y_scale;
-                    x_axis = cfg.x_axis;
-                    y_axis = cfg.y_axis;
-                    coordinate = cfg.coordinate;
-                }
-
-                if let Some(parameter) = domain {
-                    if parameter.axes.x()
-                        && let Some((lo, hi)) = parameter.x_domain()
-                    {
-                        x_scale.domain = Some(Interval::new(lo, hi));
-                    }
-                    if parameter.axes.y()
-                        && let Some((lo, hi)) = parameter.y_domain()
-                    {
-                        y_scale.domain = Some(Interval::new(lo, hi));
-                    }
-                }
-                // The legend is measured first: it takes its space out of the pane before the plot
-                // rectangle is computed, so the two can never overlap.
-                let series: Vec<(String, Color)> = {
-                    let mut seen: Vec<String> = Vec::new();
-                    for m in &ms {
-                        if let Some(s) = &m.series {
-                            let k = s.datum.to_string();
-                            if !seen.contains(&k) {
-                                seen.push(k);
-                            }
-                        }
-                    }
-                    seen.iter()
-                        .enumerate()
-                        .map(|(i, s)| (s.clone(), (colors)(i, s)))
-                        .collect()
-                };
-                let lb = legend_layout(&series, legend, size, label_size, &font);
-                let legend_insets = lb.as_ref().map(|l| l.insets).unwrap_or_default();
-
-                let cfg = resolve::Config {
-                    x_scale: &x_scale,
-                    y_scale: &y_scale,
-                    x_axis: &x_axis,
-                    y_axis: &y_axis,
-                    coordinate,
-                    series_colors: &*colors,
-                    label_size,
-                    font: font.clone(),
-                    legend_insets,
-                    plot_insets,
-                };
-                let target = resolve::resolve(ms, size, &cfg);
+                let prepared = spec.prepare(size, ch);
                 // Subscribed so each frame of a transition re-records; idle, it never fires.
                 frame.track();
                 let resolved = motion_frame(
                     &motion,
-                    target,
+                    prepared.target.clone(),
                     size,
                     // Ambient intent wins, as it does for native widgets.
                     day_core::current_anim().or(transition),
@@ -891,37 +1034,10 @@ impl Piece for Chart {
                     clock,
                     frame,
                 );
-                let paint = render::Paint2 {
-                    chrome: &ch,
-                    label_size,
-                    font: font.clone(),
-                    x_axis: &x_axis,
-                    y_axis: &y_axis,
-                    series_colors: &*colors,
-                };
-                let emphasized = if conditions.is_empty() {
-                    None
-                } else {
-                    let mut painted = resolved.clone();
-                    for mark in &mut painted.marks {
-                        for condition in &conditions {
-                            let visual = if condition.predicate.matches(&mark.mark) {
-                                condition.selected
-                            } else {
-                                condition.other
-                            };
-                            visual.apply(&mut mark.mark);
-                        }
-                    }
-                    Some(painted)
-                };
-                render::draw(d, emphasized.as_ref().unwrap_or(&resolved), &paint);
-                let legend_hits = if let Some(lb) = lb {
-                    draw_legend(d, &series, &lb, resolved.plot, &paint, &interactions_draw)
-                } else {
-                    Vec::new()
-                };
+                let legend_hits = spec.draw(d, &prepared, &resolved, &interactions_draw);
                 if !interactions_draw.is_empty() {
+                    let paint = spec.paint(&prepared);
+                    let ch = &prepared.chrome;
                     let mut model = render::hit_model(&resolved, &paint);
                     model.marks.extend(legend_hits);
                     *hits_draw.borrow_mut() = model;
@@ -1146,6 +1262,9 @@ impl Piece for Chart {
                     }
                 }
             });
+        }
+        if let Some(menu) = exports.as_ref().and_then(ChartExports::context_menu_items) {
+            piece = piece.context_menu(move || menu());
         }
         piece.build(cx)
     }

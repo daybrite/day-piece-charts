@@ -129,3 +129,9 @@ inter_inputs = Sélections liées aux contrôles
 inter_filtered_note = Sélectionnez une zone en haut. Le bas filtre ses données avec la même requête et conserve les axes initiaux. Cliquez ou touchez en dehors de la zone sélectionnée pour l’effacer.
 inter_inputs_note = Choisissez un groupe dans le sélecteur, le graphique ou la légende. Une requête sur un champ synchronise les trois contrôles.
 inter_all_groups = Tous les groupes
+
+export_png = Exporter en PNG
+export_pdf = Exporter en PDF
+export_saved = { $name } enregistré
+export_canceled = Exportation annulée
+export_failed = Échec de l’exportation : { $reason }

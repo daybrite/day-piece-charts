@@ -124,3 +124,9 @@ inter_inputs = 输入绑定选择
 inter_filtered_note = 在上方视图中框选。下方视图使用同一条件筛选数据，并保留原始坐标轴。 点击或轻触选区外部可清除选择。
 inter_inputs_note = 在选择器、图表或图例中选择分组。基于字段的选择条件保持三个控件同步。
 inter_all_groups = 所有分组
+
+export_png = 导出为 PNG
+export_pdf = 导出为 PDF
+export_saved = 已保存 { $name }
+export_canceled = 已取消导出
+export_failed = 导出失败：{ $reason }

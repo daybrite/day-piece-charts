@@ -1,0 +1,38 @@
+# Canvas export (https://daybrite.dev/docs/canvas "Exporting"): the open page's charts saved as a
+# PNG and a PDF, through the toolkit's own painter, from a chart's context menu and from the File
+# menu. Scripted runs answer the save dialog with a path under the app's temp directory, so the
+# bytes are really written.
+#
+#     day launch -t macos-appkit --script dayscript/export.yaml
+#
+# PNG renders everywhere but WinUI, which has no offscreen painter yet. PDF needs a native PDF
+# writer: AppKit, UIKit, GTK, Qt and Android have one; ArkUI, the web and WinUI do not, and there
+# the item is present but disabled. The File menu exists on the desktop toolkits only.
+name: export
+description: Export a page's charts as PNG and PDF from the context menu and the File menu.
+flow:
+  - wait_for: { id: nav }
+  - navigate: { route: bars }
+  - wait_for: { id: bars }
+
+  - context_menu: { id: bars, item_id: charts_export_png, skip_on: [windows-winui] }
+  - assert_presented: { skip_on: [windows-winui] }
+  - respond: { path: "bars.png", skip_on: [windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: bars.png }, skip_on: [windows-winui] }
+
+  - context_menu: { id: bars, item_id: charts_export_pdf, skip_on: [harmony-arkui, web-dom, windows-winui] }
+  - assert_presented: { skip_on: [harmony-arkui, web-dom, windows-winui] }
+  - respond: { path: "bars.pdf", skip_on: [harmony-arkui, web-dom, windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: bars.pdf }, skip_on: [harmony-arkui, web-dom, windows-winui] }
+
+  # The same commands from the menu bar, on a page with two charts: one PNG, two PDF pages.
+  - navigate: { route: interactive-linked }
+  - menu: { id: charts_export_pdf, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - assert_presented: { skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - respond: { path: "interactive-linked.pdf", skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.pdf }, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - menu: { id: charts_export_png, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - assert_presented: { skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - respond: { path: "interactive-linked.png", skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.png }, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - screenshot: { name: export }
