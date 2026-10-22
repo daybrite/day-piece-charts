@@ -12,11 +12,9 @@ use day_spec::{MenuItem, WindowOptions};
 fn a_charts_context_menu_offers_both_exports_and_disables_the_missing_one() {
     day_core::uninstall_tree();
     let (mock, probe) = MockToolkit::new();
-    day_core::launch_with(
-        mock,
-        WindowOptions::default().size(600.0, 800.0),
-        || day_piece_charts_gallery::page(ChartPage::Bars),
-    );
+    day_core::launch_with(mock, WindowOptions::default().size(600.0, 800.0), || {
+        day_piece_charts_gallery::page(ChartPage::Bars)
+    });
     day_reactive::flush_sync();
     let (_, canvas) = probe.find_by_kind("day.canvas").remove(0);
     let node = day_core::id_to_rnode(day_spec::NodeId(canvas.node));
@@ -25,7 +23,9 @@ fn a_charts_context_menu_offers_both_exports_and_disables_the_missing_one() {
     let state = |id: &str| {
         items.iter().find_map(|i| match i {
             MenuItem::Action {
-                id: Some(item), enabled, ..
+                id: Some(item),
+                enabled,
+                ..
             } if item == id => Some(*enabled),
             _ => None,
         })
