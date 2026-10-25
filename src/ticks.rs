@@ -288,7 +288,7 @@ pub fn decimals_for_step(step: f64) -> usize {
 
 /// Format one value at a step's precision, in the reader's locale.
 ///
-/// Grouped and separated by the locale's own rule (`day_l10n::format_decimal`), because an axis
+/// Grouped and separated by the locale's own rule (`day_localization::format_decimal`), because an axis
 /// label is a number a person reads: `1,234,567` in en, `1.234.567` in de. Ungrouped digits stop
 /// being legible somewhere around four of them, which is the whole reason a log axis used to
 /// escape to exponent form as early as it did.
@@ -296,7 +296,7 @@ pub fn format_value(v: f64, step: f64) -> String {
     let d = decimals_for_step(step);
     // `-0` is a real f64 and prints with its sign, which reads as an error on an axis.
     let v = if v == 0.0 { 0.0 } else { v };
-    day_l10n::format_decimal(v, d)
+    day_localization::format_decimal(v, d)
 }
 
 fn format_all(values: &[f64], step: f64) -> Vec<String> {
@@ -517,8 +517,8 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
 /// Which parts of an instant a time axis shows, from the span it covers: a clock time when the
 /// axis spans hours, a date when it spans months, a bare year when it spans decades. Showing the
 /// full timestamp at every tick is what makes a time axis unreadable.
-fn time_fields(span: f64) -> day_l10n::DateFields {
-    use day_l10n::DateFields::*;
+fn time_fields(span: f64) -> day_localization::DateFields {
+    use day_localization::DateFields::*;
     if span < 2.0 * MINUTE {
         HourMinuteSecond
     } else if span < 2.0 * DAY {
@@ -533,16 +533,16 @@ fn time_fields(span: f64) -> day_l10n::DateFields {
 }
 
 /// Label an instant at the precision the axis's span justifies (`time_fields`), written the
-/// current locale's way (`day_l10n::format_date`): `Mar 5` in English, `5 mars` in French,
+/// current locale's way (`day_localization::format_date`): `Mar 5` in English, `5 mars` in French,
 /// `3:30 PM` against `15:30`. A tracked read, so the axis relabels itself when the locale
 /// switches.
 pub fn time_label(t: f64, span: f64) -> String {
-    day_l10n::format_date(t, time_fields(span))
+    day_localization::format_date(t, time_fields(span))
 }
 
 /// [`time_label`] in a named locale (untracked).
 pub fn time_label_in(locale: &str, t: f64, span: f64) -> String {
-    day_l10n::format_date_in(locale, t, time_fields(span))
+    day_localization::format_date_in(locale, t, time_fields(span))
 }
 
 #[cfg(test)]
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn a_time_axis_writes_dates_the_locales_way_at_its_spans_precision() {
-        use day_l10n::DateFields;
+        use day_localization::DateFields;
 
         // The chart chooses the fields; Day's formatter owns their locale-specific spelling.
         // ICU/CLDR updates can change that spelling (German MonthDay changed from "05.03."
@@ -570,7 +570,7 @@ mod tests {
             for (span, fields) in cases {
                 assert_eq!(
                     time_label_in(locale, T, span),
-                    day_l10n::format_date_in(locale, T, fields),
+                    day_localization::format_date_in(locale, T, fields),
                     "locale {locale}, span {span}, fields {fields:?}",
                 );
             }

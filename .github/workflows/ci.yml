@@ -75,7 +75,7 @@ jobs:
   #
   # All eight primary platform-toolkit pairs, because "no per-toolkit code" is true of this crate
   # and not of what replays its drawing: every backend decodes the display list itself, and
-  # day-dom decodes a wire format of its own rather than day-spec's `encode_ops`. Text measurement
+  # day-toolkit-dom decodes a wire format of its own rather than day-spec's `encode_ops`. Text measurement
   # is a backend duty too, and the plot's margins and tick count are derived from it, so a chart's
   # layout can differ per backend even though its display list does not. The four `extra` pairs
   # (macos-gtk, macos-qt, windows-gtk, windows-qt) are declared in demo/Day.toml and buildable by
@@ -89,7 +89,7 @@ jobs:
     secrets: inherit
     with:
       project-path: demo
-      targets: macos-appkit, linux-gtk, linux-qt, windows-winui, ios-uikit, android-mdc,
+      targets: macos-appkit, linux-gtk, linux-qt, windows-winui, ios-uikit, android-material,
         harmony-arkui, web-dom
       update-day-deps: true
       scripts: dayscript/charts.yaml dayscript/gallery.yaml

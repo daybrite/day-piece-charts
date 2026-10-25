@@ -29,7 +29,7 @@ use day::prelude::*;
 use day_piece_charts::ChartExports;
 
 // Typed accessors for this crate's own strings: `res::str::ex_line()` and friends.
-day_fluent::locales!();
+day_localization_ui::locales!();
 
 /// The charts the crate's README documents.
 mod examples;

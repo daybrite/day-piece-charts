@@ -20,7 +20,7 @@ publish = false
 
 [dependencies]
 day = { git = "https://github.com/daybrite/day.git" }
-day-fluent = { git = "https://github.com/daybrite/day.git" }
+day-localization-ui = { git = "https://github.com/daybrite/day.git" }
 day-piece-charts = { path = ".." }
 
 [dev-dependencies]

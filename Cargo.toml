@@ -23,7 +23,7 @@ publish = false
 
 [package.metadata.day]
 # The day minor this release is built and tested against. `day build` notes a mismatch.
-compat = "0.5"
+compat = "0.6"
 
 [dependencies]
 day-spec = { git = "https://github.com/daybrite/day.git" }
@@ -32,9 +32,9 @@ day-pieces = { git = "https://github.com/daybrite/day.git" }
 day-reactive = { git = "https://github.com/daybrite/day.git" }
 day-geometry = { git = "https://github.com/daybrite/day.git" }
 # Axis labels are numbers, and a number is locale-dependent: grouping separators, the decimal
-# mark, and the grouping rule itself (en-IN groups by lakh). day-l10n already carries the icu4x
+# mark, and the grouping rule itself (en-IN groups by lakh). day-localization already carries the icu4x
 # formatter every Day app links, so this edge adds a call, not a dependency.
-day-l10n = { git = "https://github.com/daybrite/day.git" }
+day-localization = { git = "https://github.com/daybrite/day.git" }
 
 [dev-dependencies]
 day-mock = { git = "https://github.com/daybrite/day.git" }

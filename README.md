@@ -72,7 +72,7 @@ day launch --git https://github.com/daybrite/day-piece-charts.git
 
 `--git` clones the repository, finds the Day project inside it (`demo/`), builds it for your
 desktop and runs it; the checkout and its build tree are cached per URL, so a second run starts
-where the first left off. Add `-p ios-uikit`, `-p android-mdc` or `-p web-dom` to run it
+where the first left off. Add `-p ios-uikit`, `-p android-material` or `-p web-dom` to run it
 somewhere else, and `--project demo` to name the project explicitly, which `day` asks for when
 a repository holds more than one Day project.
 
@@ -135,7 +135,7 @@ state; Day reruns bindings that read it when its value changes. Use `.by_series(
 on marks to assign a series and `.by_position(...)` to place grouped bars side by side.
 
 The Cargo dependency is the whole integration. Build with your app's configured
-Day target, for example `day build -p android-mdc`, or run `day launch -p ios-uikit`
+Day target, for example `day build -p android-material`, or run `day launch -p ios-uikit`
 with the corresponding SDK installed. The [demo](demo/) is a complete Day project: this
 app's own page of five compositions, and the gallery of examples below.
 
@@ -1069,7 +1069,7 @@ measurement, [day-spec](https://github.com/daybrite/day/tree/main/crates/day-spe
 drawing types, [day-pieces](https://github.com/daybrite/day/tree/main/crates/day-pieces) for the
 canvas, [day-reactive](https://github.com/daybrite/day/tree/main/crates/day-reactive) for
 bindings, [day-geometry](https://github.com/daybrite/day/tree/main/crates/day-geometry) for
-geometry, and [day-l10n](https://github.com/daybrite/day/tree/main/crates/day-l10n) for
+geometry, and [day-localization](https://github.com/daybrite/day/tree/main/crates/day-localization) for
 locale-aware numbers and dates, which brings Day's
 [ICU4X](https://github.com/unicode-org/icu4x) formatting in transitively.
 [day-mock](https://github.com/daybrite/day/tree/main/crates/day-mock) is a dev-dependency, for
@@ -1093,7 +1093,7 @@ by path and is a complete integration example.
 Run `cargo test` for the grammar, geometry, and rendering-model checks. From `demo/`,
 `day launch -p web-dom --script dayscript/charts.yaml` drives this app's own page and
 `--script dayscript/gallery.yaml` walks the examples; `-p macos-appkit`, `-p ios-uikit`
-and `-p android-mdc` run the same scripts on those targets. Both check the values a
+and `-p android-material` run the same scripts on those targets. Both check the values a
 chart derives and capture screenshots. Read the screenshots as well as the log: canvas
 text is drawn content, so no assertion can reach the labels inside a plot.
 

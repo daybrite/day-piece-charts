@@ -3,7 +3,7 @@
 # the same commands run it here.
 #
 #     day launch -p ios-uikit --script dayscript/charts.yaml
-#     day launch -p android-mdc --script dayscript/charts.yaml
+#     day launch -p android-material --script dayscript/charts.yaml
 #     day launch -p web-dom --script dayscript/charts.yaml
 #
 # A chart is drawn on the canvas, so nothing here reads the plot itself; the screenshots are what
@@ -96,5 +96,5 @@ flow:
   # Every chart on this page is `.grow()`, so the plot takes whatever the window leaves it and
   # re-records at the new size: widen the window and the axis relabels itself for the width it now
   # has, make it tall and narrow and the same data re-spaces into the new shape. There is no step
-  # here for that: `resize:` is wired for android-mdc only (day-cli script.rs), and resizing the
+  # here for that: `resize:` is wired for android-material only (day-cli script.rs), and resizing the
   # emulator's display costs the pixels the runner's guest is already close to its ceiling on.

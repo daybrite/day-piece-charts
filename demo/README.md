@@ -39,7 +39,7 @@ line of mark-building code with the bars.
 ```sh
 day doctor                                             # the toolchains for the targets below
 day launch -p ios-uikit  --script dayscript/charts.yaml
-day launch -p android-mdc --script dayscript/charts.yaml
+day launch -p android-material --script dayscript/charts.yaml
 day launch -p web-dom    --script dayscript/charts.yaml
 day launch -p web-dom    --script dayscript/gallery.yaml   # the README's examples
 ```

@@ -27,12 +27,12 @@ flow:
 
   # The same commands from the menu bar, on a page with two charts: one PNG, two PDF pages.
   - navigate: { route: interactive-linked }
-  - menu: { id: charts_export_pdf, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - assert_presented: { skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - respond: { path: "interactive-linked.pdf", skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.pdf }, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - menu: { id: charts_export_png, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - assert_presented: { skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - respond: { path: "interactive-linked.png", skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
-  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.png }, skip_on: [ios-uikit, android-mdc, harmony-arkui, web-dom, windows-winui] }
+  - menu: { id: charts_export_pdf, skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - assert_presented: { skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - respond: { path: "interactive-linked.pdf", skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.pdf }, skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - menu: { id: charts_export_png, skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - assert_presented: { skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - respond: { path: "interactive-linked.png", skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
+  - assert_text: { id: charts_export_status, key: day_piece_charts_gallery::export_saved, args: { name: interactive-linked.png }, skip_on: [ios-uikit, android-material, harmony-arkui, web-dom, windows-winui] }
   - screenshot: { name: export }

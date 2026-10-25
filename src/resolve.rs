@@ -798,7 +798,7 @@ pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> St
                 } else {
                     (-v.log10().floor()) as usize
                 };
-                day_l10n::format_decimal(v, d)
+                day_localization::format_decimal(v, d)
             } else {
                 format!("1e{}", v.log10().round() as i64)
             }
