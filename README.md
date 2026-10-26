@@ -46,7 +46,7 @@ Every example below, and the demo's pipeline page, lives in
 sidebar of them, and an app of your own can mount the same pages:
 
 ```toml
-day-piece-charts-gallery = { git = "https://github.com/daybrite/day-piece-charts.git" }
+day-piece-charts-gallery = "0.1"
 ```
 
 ```rust
@@ -110,7 +110,7 @@ Add the crate to your app's `Cargo.toml`:
 
 ```toml
 [dependencies]
-day-piece-charts = { git = "https://github.com/daybrite/day-piece-charts.git" }
+day-piece-charts = "0.4"
 ```
 
 Return a chart from your UI function, then place it in the app's layout:

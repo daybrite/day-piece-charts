@@ -6,9 +6,6 @@ rust-version = "1.89"
 description = "A grammar-of-graphics charting piece for Day apps, drawn on the canvas"
 repository = "https://github.com/daybrite/day-piece-charts"
 license = "MPL-2.0"
-# The day framework crates are not on crates.io yet; neither is this one. Apps depend on it
-# from git, exactly as they depend on day.
-publish = false
 
 # An external Day Piece (https://daybrite.dev/contributing/extending) with no native half. Every chart is
 # recorded as a `Draw` display list and replayed by whatever backend the app runs on, so this crate
@@ -26,15 +23,15 @@ publish = false
 compat = "0.6"
 
 [dependencies]
-day-spec = { git = "https://github.com/daybrite/day.git" }
-day-core = { git = "https://github.com/daybrite/day.git" }
-day-pieces = { git = "https://github.com/daybrite/day.git" }
-day-reactive = { git = "https://github.com/daybrite/day.git" }
-day-geometry = { git = "https://github.com/daybrite/day.git" }
+day-spec = "0.6"
+day-core = "0.6"
+day-pieces = "0.6"
+day-reactive = "0.6"
+day-geometry = "0.6"
 # Axis labels are numbers, and a number is locale-dependent: grouping separators, the decimal
 # mark, and the grouping rule itself (en-IN groups by lakh). day-localization already carries the icu4x
 # formatter every Day app links, so this edge adds a call, not a dependency.
-day-localization = { git = "https://github.com/daybrite/day.git" }
+day-localization = "0.6"
 
 [dev-dependencies]
-day-mock = { git = "https://github.com/daybrite/day.git" }
+day-mock = "0.6"
