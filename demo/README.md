@@ -49,9 +49,10 @@ the chart runs before it draws — the domain `resolve::domain_of` infers and th
 extended-Wilkinson search picks — and captures seven screenshots under
 `build/day/screenshots/<target>/` for the drawing itself. `gallery.yaml` opens each of the fourteen
 examples by its route and captures one screenshot each, named for that route.
-CI runs both on the iOS Simulator, the Android emulator, and a headless browser
+CI runs both on every primary target [Day.toml](Day.toml) declares: macOS, Linux (GTK and Qt),
+Windows, the iOS Simulator, the Android emulator, the HarmonyOS emulator, and a headless browser
 ([../.github/workflows/ci.yml](../.github/workflows/ci.yml)). Each backend decodes the display
-list itself, so the three sets of screenshots are three renderings of the same drawings.
+list itself, so each target's screenshots are its own rendering of the same drawings.
 
 CI publishes a project website for this app from `main` ([daysite](https://github.com/daybrite/daysite),
 configured by [website/site.toml](website/site.toml)): a landing page, a gallery of the captures

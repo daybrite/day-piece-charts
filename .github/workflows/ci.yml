@@ -1,17 +1,11 @@
 name: ci
 
-# Three questions, answered on every push and once a day:
-#   host         does the crate build, lint, and pass its host tests (the grammar arithmetic)?
-#   portability  does it compile for the targets it claims to draw the same on?
-#   demo         do the two walkthroughs pass on all eight primary platform-toolkit pairs,
-#                against day's main or newest release, and do they draw what the README says they draw?
-#
-# No Cargo.lock is committed, here or in demo/: every run resolves day afresh. A push builds against the
-# head of day's main (and of every other Day repository it uses), and the nightly run against
-# the newest releases on crates.io (daybrite/actions' day-deps). A red push run after a day push
-# is the signal, not a nuisance; a red nightly run means this crate needs a day that is not
-# released yet. There is no pinned lock for a local `day patch` table to rewrite and commit by
-# accident.
+# The shared Day library workflow (daybrite/actions' daylib.yml) reads what to check from this
+# repository's manifests: clippy and test on Linux, macOS and Windows, with each toolkit feature on
+# the OS it draws on; clippy for the mobile and web targets demo/Day.toml declares, and the demo's
+# walkthrough on every one of them. A push builds against the head of day's main and of every other
+# Day repository it uses; the nightly run builds against the newest releases on crates.io. A version
+# tag publishes the piece and its gallery once the host and cross-target checks pass.
 on:
   push:
     branches: ["**"]
@@ -24,113 +18,21 @@ on:
         type: boolean
         default: false
   schedule:
-    # Daily: day's main moves on weeks nobody pushes here, and the canvas duties this crate draws
-    # through are the ones most likely to move under it.
     - cron: "0 8 * * *"
 
-# The repository's own jobs run this checkout's code with a read-only token. The write grants
-# sit on the job that calls the shared workflow, whose release and Pages jobs alone use them;
-# its build legs, which run this code too, narrow their token to read-only themselves.
 permissions:
   contents: read
 
 jobs:
-  host:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      # Day from crates.io, or from main on a push (daybrite/actions day-deps).
-      - uses: daybrite/actions/.github/actions/day-deps@v1
-        with:
-          day-deps: ${{ inputs.day-main && 'main' || 'auto' }}
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      # tests/grammar.rs: tick selection, scale geometry, the position adjustments and the
-      # monotone spline's no-overshoot guarantee: the same search dayscript/charts.yaml reads
-      # back on device, asserted here in depth and without a toolkit.
-      - run: cargo test
-
-  # This crate has no native half: every chart is a `Draw` display list, so there is no per-toolkit
-  # code and no backend features to check. What is worth proving instead is the claim the README
-  # makes, that the same crate compiles everywhere the display list is replayed. wasm32 is the
-  # one that actually catches things, because it is where a stray `std::time` or a thread-local
-  # stops being portable. A wasm32 build that compiles can still panic on its first frame, so the
-  # demo's web-dom leg below runs the same code in a browser.
-  portability:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: macos-15, target: aarch64-apple-ios-sim }
-          - { os: ubuntu-latest, target: aarch64-linux-android }
-          - { os: ubuntu-latest, target: wasm32-unknown-unknown }
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      # Day from crates.io, or from main on a push (daybrite/actions day-deps).
-      - uses: daybrite/actions/.github/actions/day-deps@v1
-        with:
-          day-deps: ${{ inputs.day-main && 'main' || 'auto' }}
-      - run: cargo clippy --target ${{ matrix.target }} -- -D warnings
-
-  # The proof: the demo app, driven end to end on every target by the shared Day workflow. It
-  # builds against day's main or newest release, runs both dayscripts, and fails on a failed assertion or a
-  # blank capture. The plot itself is a canvas, so the assertions read what the chart derives
-  # before it draws and what a tap on it selects, and the screenshots carry the drawing. Captures
-  # are uploaded per target, and a tag build attaches them to the release.
-  #
-  # Two scripts: charts.yaml asserts what the pipeline derives and that a tap reports a selection,
-  # and gallery.yaml walks the illustrative charts the README documents, selects a value on each
-  # interactive one and captures a screenshot per example, named for the README section that
-  # prints its source.
-  #
-  # All eight primary platform-toolkit pairs, because "no per-toolkit code" is true of this crate
-  # and not of what replays its drawing: every backend decodes the display list itself, and
-  # day-toolkit-dom decodes a wire format of its own rather than day-spec's `encode_ops`. Text measurement
-  # is a backend duty too, and the plot's margins and tick count are derived from it, so a chart's
-  # layout can differ per backend even though its display list does not. The two `extra` pairs
-  # (macos-gtk, macos-qt) are declared in demo/Day.toml and buildable by hand; they are left out
-  # here because they add runner time without adding a decoder.
-  demo:
-    uses: daybrite/actions/.github/workflows/dayapp.yml@v1
+  ci:
+    uses: daybrite/actions/.github/workflows/daylib.yml@v1
     permissions:
-      contents: write # release-asset upload on tag builds
-      pages: write    # web-dom → GitHub Pages (deploy-web)
-      id-token: write # deploy-pages OIDC token (deploy-web)
+      contents: write # the demo's release assets on a version tag
+      pages: write # the project website
+      id-token: write # crates.io Trusted Publishing, and the Pages deploy
     secrets: inherit
     with:
-      project-path: demo
-      targets: macos-appkit, linux-gtk, linux-qt, windows-winui, ios-uikit, android-material,
-        harmony-arkui, web-dom
-      day-deps: ${{ inputs.day-main && 'main' || 'auto' }}
-      # On a version tag, after every leg passed: the library crates to crates.io.
-      publish-crates: true
-      # The piece, then the gallery, which depends on the piece.
-      publish-crates-paths: . gallery
+      day-main: ${{ inputs.day-main || false }}
       scripts: dayscript/charts.yaml dayscript/gallery.yaml
-      # Every script runs twice, once per theme, so each chart is captured in both palettes:
-      # the project website's gallery gets its light/dark control, and the README shows each
-      # example in whichever palette the reader's GitHub is in (a `<picture>` per image). A
-      # chart draws in the platform's own colors, so this is also where a palette that fails in
-      # the dark becomes visible — the captures are the only place anyone would see it.
-      #
-      # The variant directory is the theme (`gallery/<target>/light/<shot>.png`), which is what
-      # the README links; without this input it is `default`, and adding or removing the input
-      # moves every published image.
       themes: light dark
-      preflight-checks: fmt, clippy, test
-      # Publish on every push to main. demo/website/site.toml is the opt-in for the project
-      # website, so what deploys is the daysite build: a landing page, the gallery of the
-      # captures gallery.yaml just took, and the web build under /webapp/. The crate's README
-      # links to both, which is why it carries no images of its own. Without that file this
-      # would deploy the bare web dist to the Pages root instead.
       deploy-web: true
-      ios-devices: |
-        device=iPhone, orientation=portrait
-      android-devices: |
-        device=pixel_7,     os=36, orientation=portrait
-
