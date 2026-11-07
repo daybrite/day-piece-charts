@@ -18,15 +18,15 @@ license = "MPL-2.0"
 # revision for the whole graph.
 
 [dependencies]
-day = { package = "day-app", version = "0.6" }
-day-localization-ui = "0.6"
-day-piece-charts = { path = "..", version = "0.4" }
+day = { package = "day-app", version = "0.*" }
+day-localization-ui = "0.*"
+day-piece-charts = { path = "..", version = "0.*" }
 
 [dev-dependencies]
-day-core = "0.6"
-day-mock = "0.6"
-day-spec = "0.6"
-day-reactive = "0.6"
+day-core = "0.*"
+day-mock = "0.*"
+day-spec = "0.*"
+day-reactive = "0.*"
 
 [build-dependencies]
-day-build = "0.6"
+day-build = "0.*"
