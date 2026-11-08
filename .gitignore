@@ -15,6 +15,7 @@
 # checkout instead of the git dependency. CI has no such file and resolves git.
 /.cargo/config.toml
 /demo/.cargo/config.toml
+/gallery/.cargo/config.toml
 
 # Xcode and Gradle local state inside the demo's platform scaffolds (see demo/.gitignore).
 /demo/**/xcuserdata/
