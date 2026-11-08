@@ -21,7 +21,7 @@ Build with the Day CLI to select the matching toolkit integration.
 ## Documentation
 
 - [Setup and usage guide](https://daybrite.dev/docs/reference/charts/#examples)
-- [Rust API](https://docs.rs/day-piece-charts-gallery/0.1.0/day_piece_charts_gallery/)
+- [Rust API](https://docs.rs/day-piece-charts-gallery/0.1.1/day_piece_charts_gallery/)
 - [Crates.io](https://crates.io/crates/day-piece-charts-gallery)
 
 [Source](https://github.com/daybrite/day-piece-charts/tree/main/gallery) · [MPL-2.0 license](https://github.com/daybrite/day-piece-charts/blob/main/LICENSE)

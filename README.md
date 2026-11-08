@@ -21,7 +21,7 @@ Build with the Day CLI to select the matching toolkit integration.
 ## Documentation
 
 - [Setup and usage guide](https://daybrite.dev/docs/reference/charts/)
-- [Rust API](https://docs.rs/day-piece-charts/0.4.2/day_piece_charts/)
+- [Rust API](https://docs.rs/day-piece-charts/0.4.3/day_piece_charts/)
 - [Crates.io](https://crates.io/crates/day-piece-charts)
 - [Reusable chart gallery](https://daybrite.dev/docs/reference/charts/#examples)
 - [Run the demo](demo/README.md)
