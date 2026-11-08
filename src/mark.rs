@@ -105,7 +105,7 @@ impl Symbol {
 
 /// How a mark's extent across its band is decided: Swift Charts' `MarkDimension`.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Dimension {
+pub enum MarkDimension {
     /// The scale's own band width, less its padding.
     Automatic,
     /// Exactly this many points.
@@ -116,13 +116,13 @@ pub enum Dimension {
     Inset(f64),
 }
 
-impl Dimension {
+impl MarkDimension {
     pub fn resolve(&self, band: f64) -> f64 {
         match self {
-            Dimension::Automatic => band,
-            Dimension::Fixed(v) => *v,
-            Dimension::Ratio(r) => band * r,
-            Dimension::Inset(i) => (band - 2.0 * i).max(0.0),
+            MarkDimension::Automatic => band,
+            MarkDimension::Fixed(v) => *v,
+            MarkDimension::Ratio(r) => band * r,
+            MarkDimension::Inset(i) => (band - 2.0 * i).max(0.0),
         }
         .max(0.0)
     }
@@ -227,8 +227,8 @@ pub struct Mark {
     /// The symbol channel, `.symbol(by:)`.
     pub symbol_by: Option<Value>,
     pub style: MarkStyle,
-    pub width: Dimension,
-    pub height: Dimension,
+    pub width: MarkDimension,
+    pub height: MarkDimension,
     pub stacking: Stacking,
     pub annotation: Option<Annotation>,
     /// An additional measured value for interactive annotations, e.g. a heatmap cell count.
@@ -263,8 +263,8 @@ impl Mark {
             dodge: None,
             symbol_by: None,
             style: MarkStyle::default(),
-            width: Dimension::Automatic,
-            height: Dimension::Automatic,
+            width: MarkDimension::Automatic,
+            height: MarkDimension::Automatic,
             // Bars, areas and sectors stack by default; points and lines do not. These are the same
             // defaults Swift Charts picks, and for the same reason: stacking is meaningful only
             // where the marks partition a quantity. A sector belongs in that list because a pie is
@@ -392,11 +392,11 @@ impl Mark {
 
     // --- Geometry ---
 
-    pub fn width(mut self, d: Dimension) -> Self {
+    pub fn width(mut self, d: MarkDimension) -> Self {
         self.width = d;
         self
     }
-    pub fn height(mut self, d: Dimension) -> Self {
+    pub fn height(mut self, d: MarkDimension) -> Self {
         self.height = d;
         self
     }

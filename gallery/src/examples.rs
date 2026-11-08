@@ -483,11 +483,11 @@ fn line_chart() -> impl Piece {
         )
         .animated()
         .id(day::id!(lines))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Two series and a target line: `by_series` splits the data and names the legend entries, and a
@@ -555,11 +555,11 @@ fn line_series() -> impl Piece {
         )
         .animated()
         .id(day::id!(lines_target))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 // ---------------------------------------------------------------------------
@@ -613,11 +613,11 @@ fn area_chart() -> impl Piece {
         )
         .animated()
         .id(day::id!(area))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Three series stacked into a total. Areas stack by default, so the composition is the marks
@@ -707,11 +707,11 @@ fn area_stacked() -> impl Piece {
         )
         .animated()
         .id(day::id!(area_stacked))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 // ---------------------------------------------------------------------------
@@ -766,11 +766,11 @@ fn bar_chart() -> impl Piece {
         )
         .animated()
         .id(day::id!(bars))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Grouped bars: `by_series` colors them, `by_position` splits each month's band between the two
@@ -834,11 +834,11 @@ fn bar_grouped() -> impl Piece {
         )
         .animated()
         .id(day::id!(bars_grouped))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Each column scaled to fill the axis: `Stacking::Normalized` turns magnitudes into shares, so
@@ -881,10 +881,10 @@ fn bar_normalized() -> impl Piece {
         .legend(LegendPosition::Bottom)
         .animated()
         .id(day::id!(bars_100))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Bars along the value axis, for categories whose names need the room: the y channel takes the
@@ -938,10 +938,10 @@ fn bar_horizontal() -> impl Piece {
         .x_label("Share of respondents")
         .animated()
         .id(day::id!(bars_horizontal))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 // ---------------------------------------------------------------------------
@@ -1006,10 +1006,10 @@ fn pie_chart() -> impl Piece {
             .legend(LegendPosition::Trailing)
             .animated()
             .id(day::id!(pie))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,11 +1123,11 @@ fn scatter_chart() -> impl Piece {
         )
         .animated()
         .id(day::id!(scatter))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Both axes categorical and the value in the color: a `rect` mark per cell, `sequential` for the
@@ -1207,10 +1207,10 @@ fn heatmap_chart() -> impl Piece {
         .no_grid()
         .animated()
         .id(day::id!(heatmap))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,11 +1264,11 @@ fn time_chart() -> impl Piece {
         )
         .animated()
         .id(day::id!(time))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         selection_readout(selected),
     ))
     .spacing(6.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// A chart small enough to sit beside a number: `bare` drops the axes, the grid and the legend and
@@ -1340,7 +1340,7 @@ fn sparkline() -> impl Piece {
             .bare()
             .animated()
             .height(84.0)
-            .grow_w()
+            .grow(day::prelude::Dimension::Width)
             .any(),
         );
     }
@@ -1348,5 +1348,5 @@ fn sparkline() -> impl Piece {
         .spacing(10.0)
         .align(HAlign::Leading)
         .id(day::id!(sparkline))
-        .grow_w()
+        .grow(day::prelude::Dimension::Width)
 }

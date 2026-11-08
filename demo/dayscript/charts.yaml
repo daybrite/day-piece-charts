@@ -93,7 +93,7 @@ flow:
   - assert_text: { id: charts_selection, text: "Jan · North: 12" }
   - screenshot: charts-selection
 
-  # Every chart on this page is `.grow()`, so the plot takes whatever the window leaves it and
+  # Every chart on this page is `.grow(Dimension::Both)`, so the plot takes whatever the window leaves it and
   # re-records at the new size: widen the window and the axis relabels itself for the width it now
   # has, make it tall and narrow and the same data re-spaces into the new shape. There is no step
   # here for that: `resize:` is wired for android-material only (day-cli script.rs), and resizing the

@@ -90,7 +90,9 @@ impl Entry {
         remember_exports(page, exports.clone());
         let content = exports.around(build);
         if page == ChartPage::Pipeline {
-            return column((export_status(), content)).grow().any();
+            return column((export_status(), content))
+                .grow(day::prelude::Dimension::Both)
+                .any();
         }
         column((
             label((self.title)())
@@ -101,7 +103,7 @@ impl Entry {
         ))
         .spacing(8.0)
         .padding(16.0)
-        .grow()
+        .grow(day::prelude::Dimension::Both)
         .any()
     }
 }
@@ -181,9 +183,9 @@ pub fn gallery(selected: Signal<ChartPage>) -> impl Piece {
         }),
         // One subtree keyed by the open page: a new page replaces the old one, so each page
         // starts from its own first state, and the old page's signals go with its scope.
-        keyed(move || Some(selected.get()), |p| page(*p)).grow(),
+        keyed(move || Some(selected.get()), |p| page(*p)).grow(day::prelude::Dimension::Both),
     ))
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// Make this crate's strings resolvable by their qualified dayscript keys

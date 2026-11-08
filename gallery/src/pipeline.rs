@@ -125,7 +125,7 @@ pub(crate) fn pipeline_page() -> impl Piece {
     // readout and the slider, so a window resized in either direction re-records the chart at
     // the new size instead of padding around a fixed one.
     let chart_area = if tall {
-        chart_area.grow().any()
+        chart_area.grow(day::prelude::Dimension::Both).any()
     } else {
         chart_area.height(SHORT_WINDOW_CHART_HEIGHT).any()
     };
@@ -193,7 +193,7 @@ fn cartesian(
         // change animates (README "Animation"): the window widens, bars grow, lines extend.
         .animated()
         .id(day::id!(charts_plot))
-        .grow()
+        .grow(day::prelude::Dimension::Both)
 }
 
 /// The same two regions as a donut: one sector per region, summed over the months in view.
@@ -217,7 +217,7 @@ fn donut(months: Signal<f64>) -> impl Piece {
     .x_axis_hidden()
     .y_axis_hidden()
     .id(day::id!(charts_plot))
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// The same numbers as a grid: months across, regions down, revenue as the cell's color on the
@@ -248,7 +248,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
     .no_grid()
     .animated()
     .id(day::id!(charts_plot))
-    .grow()
+    .grow(day::prelude::Dimension::Both)
 }
 
 /// One mark per region per month, assembled the way the picked composition asks for.

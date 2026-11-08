@@ -81,7 +81,7 @@ pub use day_spec::{LineCap, LineJoin};
 pub use export::ChartExports;
 pub use layout::Insets;
 pub use mark::{
-    Annotation, AnnotationPosition, Dimension, Interpolation, Mark, MarkKind, MarkStyle, Stacking,
+    Annotation, AnnotationPosition, Interpolation, Mark, MarkDimension, MarkKind, MarkStyle, Stacking,
     Symbol, area, bar, line, point, rect, rule_x, rule_y, sector,
 };
 pub use scale::{BandPadding, Scale, ScaleKind, ScaleSpec};
@@ -1008,8 +1008,8 @@ impl Piece for Chart {
         }
         let spec_draw = spec.clone();
         let shown_draw = shown_size.clone();
-        let mut piece =
-            day_pieces::Decorate::grow(day_pieces::canvas(move |d: &mut Draw, size: Size| {
+        let mut piece = day_pieces::Decorate::grow(
+            day_pieces::canvas(move |d: &mut Draw, size: Size| {
                 if size.width <= 2.0 || size.height <= 2.0 {
                     return;
                 }
@@ -1061,24 +1061,26 @@ impl Piece for Chart {
                         }
                     }
                 }
-            }))
-            .cursor({
-                let bindings = interactions.clone();
-                move || {
-                    if pointer.get() {
-                        day_spec::Cursor::Pointer
-                    } else if bindings.iter().any(|b| matches!(b, Interaction::Brush(_))) {
-                        day_spec::Cursor::Crosshair
-                    } else if bindings
-                        .iter()
-                        .any(|b| matches!(b, Interaction::Viewport(_)))
-                    {
-                        day_spec::Cursor::Grab
-                    } else {
-                        day_spec::Cursor::Default
-                    }
+            }),
+            day_core::Dimension::Both,
+        )
+        .cursor({
+            let bindings = interactions.clone();
+            move || {
+                if pointer.get() {
+                    day_spec::Cursor::Pointer
+                } else if bindings.iter().any(|b| matches!(b, Interaction::Brush(_))) {
+                    day_spec::Cursor::Crosshair
+                } else if bindings
+                    .iter()
+                    .any(|b| matches!(b, Interaction::Viewport(_)))
+                {
+                    day_spec::Cursor::Grab
+                } else {
+                    day_spec::Cursor::Default
                 }
-            });
+            }
+        });
         if bindings_need_hover {
             piece = piece.on_hover({
                 let hits = hits.clone();

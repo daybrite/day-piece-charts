@@ -96,7 +96,7 @@ impl Piece for Legend {
                         label(move || slot.field(|e| e.label.clone()))
                             .font(Font::Caption2)
                             .single_line()
-                            .grow_w()
+                            .grow(Dimension::Width)
                             .color(move || {
                                 if interaction.is_some_and(|binding| {
                                     !binding.parameter.is_empty()
@@ -118,7 +118,7 @@ impl Piece for Legend {
                     ))
                     .spacing(5.0)
                     .align(VAlign::Center)
-                    .grow_w()
+                    .grow(Dimension::Width)
                     .padding(2.0)
                     .background(move || {
                         if interaction.is_some_and(|binding| {
@@ -221,7 +221,7 @@ impl Piece for Legend {
             },
         ),))
         .spacing(0.0)
-        .grow_w()
+        .grow(Dimension::Width)
         .build(cx)
     }
 }

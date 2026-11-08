@@ -115,7 +115,7 @@ fn linked() -> AnyPiece {
                 .format()
             })
             .id(day::id!(linked_count))
-            .grow_w(),
+            .grow(day::prelude::Dimension::Width),
             button(res::str::inter_select_sample())
                 .action(move || selected.replace(Some(Record::from_mark(&scatter()[0]))))
                 .id(day::id!(linked_select_sample)),
@@ -127,7 +127,7 @@ fn linked() -> AnyPiece {
             .interact(selected.on(EventSource::Click).toggle(Toggle::Shift))
             .condition(predicate, Visual::default(), Visual::opacity(0.16))
             .id(day::id!(linked_primary))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
         plot(|| {
             scatter()
                 .into_iter()
@@ -140,10 +140,10 @@ fn linked() -> AnyPiece {
         .interact(selected.on(EventSource::Click).toggle(Toggle::Shift))
         .condition(other, Visual::color(categorical(1)), Visual::opacity(0.16))
         .id(day::id!(linked_secondary))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn brushing() -> AnyPiece {
@@ -154,12 +154,12 @@ fn brushing() -> AnyPiece {
         label(res::str::inter_brush_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&counted) as f64).format())
             .id(day::id!(brush_count))
-            .grow_w(),
+            .grow(day::prelude::Dimension::Width),
         plot(scatter)
             .interact(brush.brush())
             .condition(predicate, Visual::default(), Visual::opacity(0.12))
             .id(day::id!(brush_source))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
         chart(move || {
             groups()
                 .into_iter()
@@ -184,10 +184,10 @@ fn brushing() -> AnyPiece {
         .legend(LegendPosition::Hidden)
         .animated()
         .id(day::id!(brush_histogram))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn waveform() -> Vec<Mark> {
@@ -216,7 +216,7 @@ fn overview() -> AnyPiece {
             .interact(range.brush())
             .id(day::id!(overview_source))
             .height(160.0)
-            .grow_w(),
+            .grow(day::prelude::Dimension::Width),
         chart(waveform)
             .x_domain(0.0, 79.0)
             .y_domain(0.0, 100.0)
@@ -224,10 +224,10 @@ fn overview() -> AnyPiece {
             .domain(range)
             .interact(Inspect::new(inspection))
             .id(day::id!(overview_detail))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn legend_page() -> AnyPiece {
@@ -251,7 +251,7 @@ fn legend_page() -> AnyPiece {
         .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
         .condition(predicate, Visual::default(), Visual::opacity(0.15))
         .id(day::id!(legend_donut))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         ch::legend(entries)
             .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
             .entry_id(|key| day::id!(interactive_legend, key)),
@@ -260,10 +260,10 @@ fn legend_page() -> AnyPiece {
             .interact(selection.on(EventSource::Click).toggle(Toggle::Always))
             .condition(other, Visual::default(), Visual::opacity(0.15))
             .id(day::id!(legend_scatter))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn cells() -> AnyPiece {
@@ -310,7 +310,7 @@ fn cells() -> AnyPiece {
             Visual::opacity(0.30),
         )
         .id(day::id!(interactive_cells))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         label(move || {
             inspection.with(|s| {
                 s.as_ref()
@@ -321,7 +321,7 @@ fn cells() -> AnyPiece {
         .id(day::id!(cells_readout)),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn zoom_by(parameter: IntervalSelection, factor: f64) {
@@ -364,10 +364,10 @@ fn viewport() -> AnyPiece {
                     .guides(Guides::CROSSHAIR),
             )
             .id(day::id!(interactive_viewport))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn compose() -> AnyPiece {
@@ -380,7 +380,7 @@ fn compose() -> AnyPiece {
         label(res::str::inter_compose_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&readout) as f64).format())
             .id(day::id!(compose_count))
-            .grow_w(),
+            .grow(day::prelude::Dimension::Width),
         ch::legend(entries)
             .interact(series.on(EventSource::Click).toggle(Toggle::Always))
             .entry_id(|key| day::id!(compose_series, key)),
@@ -388,14 +388,14 @@ fn compose() -> AnyPiece {
             .interact(brush.brush())
             .condition(intersection, Visual::default(), Visual::opacity(0.12))
             .id(day::id!(compose_intersection))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
         plot(scatter)
             .condition(union, Visual::color(categorical(1)), Visual::opacity(0.12))
             .id(day::id!(compose_union))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn links() -> AnyPiece {
@@ -421,7 +421,7 @@ fn links() -> AnyPiece {
         .interact(hover.on(EventSource::Hover))
         .condition(hover.predicate(), Visual::default(), Visual::opacity(0.20))
         .id(day::id!(interactive_links))
-        .grow(),
+        .grow(day::prelude::Dimension::Both),
         ch::legend(|| {
             entries()
                 .into_iter()
@@ -435,7 +435,7 @@ fn links() -> AnyPiece {
         label(move || res::str::inter_link_target(target.get()).format()).id(day::id!(link_target)),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 
@@ -446,18 +446,18 @@ fn filtered() -> AnyPiece {
         label(res::str::inter_filtered_note()).font(Font::Caption),
         label(move || res::str::inter_count(count(&count_query) as f64).format())
             .id(day::id!(filtered_count))
-            .grow_w(),
+            .grow(day::prelude::Dimension::Width),
         plot(scatter)
             .interact(brush.brush())
             .id(day::id!(filtered_source))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
         plot(scatter)
             .filter(brush.predicate())
             .id(day::id!(filtered_result))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
 fn inputs() -> AnyPiece {
@@ -506,7 +506,7 @@ fn inputs() -> AnyPiece {
             .interact(group.on(EventSource::Click))
             .condition(query, Visual::default(), Visual::opacity(0.15))
             .id(day::id!(inputs_plot))
-            .grow(),
+            .grow(day::prelude::Dimension::Both),
         ch::legend(|| {
             entries()
                 .into_iter()
@@ -526,6 +526,6 @@ fn inputs() -> AnyPiece {
         .entry_id(|key| day::id!(input_group, key)),
     ))
     .spacing(8.0)
-    .grow()
+    .grow(day::prelude::Dimension::Both)
     .any()
 }
