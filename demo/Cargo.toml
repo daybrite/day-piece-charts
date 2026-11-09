@@ -1,6 +1,6 @@
 [package]
 name = "charts-demo"
-version = "0.1.0"
+version = "0.5.0"
 edition = "2024"
 # Generates typed `res::` constants from `resource/` (see build.rs).
 build = "build.rs"

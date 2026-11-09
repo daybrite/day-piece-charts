@@ -81,8 +81,8 @@ pub use day_spec::{LineCap, LineJoin};
 pub use export::ChartExports;
 pub use layout::Insets;
 pub use mark::{
-    Annotation, AnnotationPosition, Interpolation, Mark, MarkDimension, MarkKind, MarkStyle, Stacking,
-    Symbol, area, bar, line, point, rect, rule_x, rule_y, sector,
+    Annotation, AnnotationPosition, Interpolation, Mark, MarkDimension, MarkKind, MarkStyle,
+    Stacking, Symbol, area, bar, line, point, rect, rule_x, rule_y, sector,
 };
 pub use scale::{BandPadding, Scale, ScaleKind, ScaleSpec};
 pub use style::{Chrome, categorical, diverging, sequential};
