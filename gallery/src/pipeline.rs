@@ -228,7 +228,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
     chart(move || {
         let n = month_count(months.get());
         let mut out = Vec::with_capacity(SERIES.len() * n);
-        for (region, values) in SERIES.iter() {
+        for (region, values) in &SERIES {
             for (month, v) in MONTHS.iter().zip(values.iter()).take(n) {
                 let t = v / PEAK;
                 out.push(
@@ -254,7 +254,7 @@ fn heat_map(months: Signal<f64>) -> impl Piece {
 /// One mark per region per month, assembled the way the picked composition asks for.
 fn marks(comp: Composition, n: usize) -> Vec<Mark> {
     let mut out = Vec::with_capacity(SERIES.len() * n);
-    for (region, values) in SERIES.iter() {
+    for (region, values) in &SERIES {
         for (month, v) in MONTHS.iter().zip(values.iter()).take(n) {
             let x = value("Month", *month);
             let y = value("Revenue", *v);
@@ -410,5 +410,5 @@ fn tick_summary(n: usize) -> String {
 /// Whole numbers without a trailing `.0`; anything else to one place, in the locale's own digits
 /// and separators.
 fn number(v: f64) -> String {
-    day::format_decimal(v, if v.fract() == 0.0 { 0 } else { 1 })
+    day::format_decimal(v, usize::from(v.fract() != 0.0))
 }

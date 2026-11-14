@@ -74,6 +74,7 @@ impl Projection {
 }
 /// A discrete query. Clone/copy this handle to bind several views to the same selection.
 #[derive(Clone, Copy)]
+#[must_use]
 pub struct PointSelection {
     pub state: Signal<Vec<Record>>,
     pub projection: Projection,
@@ -107,7 +108,7 @@ impl PointSelection {
         self.state.set_if_changed(Vec::new());
     }
     pub fn is_empty(self) -> bool {
-        self.state.with(|v| v.is_empty())
+        self.state.with(Vec::is_empty)
     }
     pub fn contains(self, record: &Record) -> bool {
         self.state.with(|points| {
@@ -154,6 +155,7 @@ pub enum Toggle {
     Shift,
 }
 #[derive(Clone, Copy)]
+#[must_use]
 pub struct PointBinding {
     pub parameter: PointSelection,
     pub trigger: EventSource,
@@ -222,6 +224,7 @@ pub struct Bounds {
 }
 /// A range query stored in data space, so resizing or linking views does not move its meaning.
 #[derive(Clone, Copy)]
+#[must_use]
 pub struct IntervalSelection {
     pub state: Signal<Option<Bounds>>,
     pub axes: Axes,
@@ -284,6 +287,7 @@ impl IntervalSelection {
     }
 }
 #[derive(Clone, Copy)]
+#[must_use]
 pub struct Brush {
     pub parameter: IntervalSelection,
     pub translate: bool,
@@ -307,6 +311,7 @@ pub struct Viewport {
 }
 /// Predicate algebra coordinates independent views: conjunction, union and complement.
 #[derive(Clone)]
+#[must_use]
 pub enum Predicate {
     Point(PointSelection),
     Interval(IntervalSelection),
@@ -381,6 +386,7 @@ pub struct Condition {
 }
 /// Inspection is one interaction, not a separate chart-wide mode; it can coexist with selection.
 #[derive(Clone, Copy)]
+#[must_use]
 pub struct Inspect {
     pub signal: Signal<Option<Selection>>,
     pub snap: Snap,
@@ -405,6 +411,7 @@ impl Inspect {
 }
 pub type LinkHandler = Rc<dyn Fn(&str)>;
 #[derive(Clone, Default)]
+#[must_use]
 pub struct Links {
     pub handler: Option<LinkHandler>,
 }

@@ -138,8 +138,7 @@ pub fn page(page: ChartPage) -> AnyPiece {
     pages()
         .into_iter()
         .find(|e| e.page == page)
-        .map(|e| e.build())
-        .unwrap_or_else(|| label("").any())
+        .map_or_else(|| label("").any(), |e| e.build())
 }
 
 /// Every page as one: a picker of the pages above whichever is open, for a host that gives the
@@ -336,6 +335,5 @@ fn saved_name(url: &FileUrl, suggested: String) -> String {
         .rsplit(['/', '\\'])
         .next()
         .filter(|n| !n.is_empty())
-        .map(str::to_owned)
-        .unwrap_or(suggested)
+        .map_or(suggested, str::to_owned)
 }

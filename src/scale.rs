@@ -121,7 +121,9 @@ impl Scale {
     fn normalize(&self, v: f64) -> f64 {
         let Interval { lo, hi } = self.domain;
         match &self.kind {
-            ScaleKind::Linear | ScaleKind::Time => (v - lo) / (hi - lo),
+            ScaleKind::Linear | ScaleKind::Time | ScaleKind::Band | ScaleKind::Point => {
+                (v - lo) / (hi - lo)
+            }
             ScaleKind::Log { base } => {
                 let (l, h, v) = (lo.max(f64::MIN_POSITIVE), hi, v.max(f64::MIN_POSITIVE));
                 (v.log(*base) - l.log(*base)) / (h.log(*base) - l.log(*base))
@@ -132,7 +134,6 @@ impl Scale {
                 let f = |x: f64| x.abs().powf(*exponent) * x.signum();
                 (f(v) - f(lo)) / (f(hi) - f(lo))
             }
-            ScaleKind::Band | ScaleKind::Point => (v - lo) / (hi - lo),
         }
     }
 
@@ -166,7 +167,9 @@ impl Scale {
         let t = (p - self.range.0) / (self.range.1 - self.range.0);
         let Interval { lo, hi } = self.domain;
         Some(match &self.kind {
-            ScaleKind::Linear | ScaleKind::Time => lo + t * (hi - lo),
+            ScaleKind::Linear | ScaleKind::Time | ScaleKind::Band | ScaleKind::Point => {
+                lo + t * (hi - lo)
+            }
             ScaleKind::Log { base } => {
                 let l = lo.max(f64::MIN_POSITIVE).log(*base);
                 let h = hi.log(*base);
@@ -177,7 +180,6 @@ impl Scale {
                 let g = |x: f64| x.abs().powf(1.0 / *exponent) * x.signum();
                 g(f(lo) + t * (f(hi) - f(lo)))
             }
-            ScaleKind::Band | ScaleKind::Point => lo + t * (hi - lo),
         })
     }
 
@@ -193,7 +195,7 @@ impl Scale {
         let start = self.range.0.min(self.range.1);
         let i = ((p - start - self.padding.outer * step) / step).floor();
         let i = i.clamp(0.0, self.categories.len() as f64 - 1.0) as usize;
-        self.categories.get(i).map(|s| s.as_str())
+        self.categories.get(i).map(std::string::String::as_str)
     }
 
     /// The extent one category occupies, padding included.
@@ -238,7 +240,7 @@ impl Scale {
         let step = self.step();
         let start = self.range.0.min(self.range.1);
         if self.categories.len() <= 1 {
-            return (self.range.0 + self.range.1) / 2.0;
+            return f64::midpoint(self.range.0, self.range.1);
         }
         start + self.padding.outer * step + i as f64 * step
     }
@@ -329,23 +331,22 @@ pub fn infer(
         });
         Scale::discrete(kind, cats, range)
     } else {
-        let mut iv = match spec.domain {
-            Some(d) => d,
-            None => {
-                let mut it = data
-                    .iter()
-                    .filter_map(|d| d.as_continuous())
-                    .filter(|v| v.is_finite());
-                match it.next() {
-                    Some(first) => {
-                        let mut iv = Interval::new(first, first);
-                        for v in it {
-                            iv.extend(v);
-                        }
-                        iv
+        let mut iv = if let Some(d) = spec.domain {
+            d
+        } else {
+            let mut it = data
+                .iter()
+                .filter_map(Datum::as_continuous)
+                .filter(|v| v.is_finite());
+            match it.next() {
+                Some(first) => {
+                    let mut iv = Interval::new(first, first);
+                    for v in it {
+                        iv.extend(v);
                     }
-                    None => Interval::new(0.0, 1.0),
+                    iv
                 }
+                None => Interval::new(0.0, 1.0),
             }
         };
         if spec.include_zero && spec.domain.is_none() {
@@ -357,7 +358,7 @@ pub fn infer(
             if iv.lo <= 0.0 {
                 let smallest = data
                     .iter()
-                    .filter_map(|d| d.as_continuous())
+                    .filter_map(super::data::Datum::as_continuous)
                     .filter(|v| *v > 0.0)
                     .fold(f64::INFINITY, f64::min);
                 iv.lo = if smallest.is_finite() {

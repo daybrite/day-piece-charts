@@ -207,7 +207,7 @@ fn stepper(
     title: day::LocalizedText,
     value: Signal<usize>,
     range: std::ops::RangeInclusive<usize>,
-    ids: [day::ElementId; 3],
+    ids: &[day::ElementId; 3],
 ) -> AnyPiece {
     let (lo, hi) = (*range.start(), *range.end());
     row((
@@ -1067,7 +1067,7 @@ fn scatter_chart() -> impl Piece {
                 res::str::ex_series(),
                 series,
                 1..=ALLOYS.len(),
-                [
+                &[
                     day::id!(charts_series_less),
                     day::id!(charts_series),
                     day::id!(charts_series_more),
@@ -1194,10 +1194,10 @@ fn heatmap_chart() -> impl Piece {
                                 AnnotationPosition::Overlay,
                                 day::format_decimal(*visits, 0),
                             )
-                            .annotation_color(if !light {
-                                Color::WHITE
-                            } else {
+                            .annotation_color(if light {
                                 Color::rgba(0.0, 0.0, 0.0, 0.75)
+                            } else {
+                                Color::WHITE
                             }),
                     );
                 }

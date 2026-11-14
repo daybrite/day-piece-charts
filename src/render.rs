@@ -55,8 +55,7 @@ fn color_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>) -> Color {
         let name = r
             .series
             .get(p.series_index)
-            .map(|s| s.as_str())
-            .unwrap_or("");
+            .map_or("", std::string::String::as_str);
         (paint.series_colors)(p.series_index, name)
     });
     let alpha = p.mark.style.opacity.clamp(0.0, 1.0);
@@ -212,8 +211,7 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             MarkKind::Bar | MarkKind::Rectangle => bar_or_rect(d, r, paint, p),
             MarkKind::Rule => rule(d, r, paint, p),
             MarkKind::Sector => sector(d, r, paint, p),
-            MarkKind::Line | MarkKind::Area => {}
-            MarkKind::Point => {}
+            MarkKind::Line | MarkKind::Area | MarkKind::Point => {}
         }
     }
     for (kind, si) in connected.iter().filter(|(k, _)| *k == MarkKind::Line) {
@@ -241,7 +239,7 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         }
     }
     for (look, at) in groups {
-        draw_symbols(d, look.symbol, at, look.radius, look.color, look.width);
+        draw_symbols(d, look.symbol, &at, look.radius, look.color, look.width);
     }
     if clip {
         d.restore();
@@ -575,8 +573,8 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     };
     // An explicit x span (a histogram bin, a horizontal bar, a Gantt bar) is the rectangle's
     // edges; without one the mark is centered on its position and as wide as its band.
-    let (left, right) = match (&p.mark.x, &p.mark.x_end) {
-        (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
+    let (left, right) = if let (Some(a), Some(b)) = (&p.mark.x, &p.mark.x_end) {
+        match (r.x.project(&a.datum), r.x.project(&b.datum)) {
             (Some(xa), Some(xb)) => {
                 if r.y.kind.is_discrete() {
                     // A horizontal bar grows along x from its start: square on the axis when it
@@ -589,11 +587,10 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
                 (xa.min(xb), xa.max(xb))
             }
             _ => return,
-        },
-        _ => {
-            let w = band_of(p, r);
-            (cx - w / 2.0, cx + w / 2.0)
         }
+    } else {
+        let w = band_of(p, r);
+        (cx - w / 2.0, cx + w / 2.0)
     };
     let rect = Rect::new(
         left + p.mark.offset.0,
@@ -667,7 +664,7 @@ fn stroke_style(p: &Placed) -> StrokeStyle {
     s.cap = p.mark.style.line_cap;
     s.join = p.mark.style.line_join;
     if !p.mark.style.dash.is_empty() {
-        s.dash = p.mark.style.dash.clone();
+        s.dash.clone_from(&p.mark.style.dash);
     }
     s
 }
@@ -787,7 +784,7 @@ fn append(mut b: PathBuilder, pts: &[Point], interp: Interpolation, start: bool)
         }
         Interpolation::StepCenter => {
             for w in pts.windows(2) {
-                let mx = (w[0].x + w[1].x) / 2.0;
+                let mx = f64::midpoint(w[0].x, w[1].x);
                 b = b
                     .line_to(Point::new(mx, w[0].y))
                     .line_to(Point::new(mx, w[1].y))
@@ -857,7 +854,7 @@ fn monotone(pts: &[Point]) -> Vec<(Point, Point, Point)> {
             // A local extremum: a zero tangent is the only value that cannot overshoot.
             m[i] = 0.0;
         } else {
-            m[i] = (secant[i - 1] + secant[i]) / 2.0;
+            m[i] = f64::midpoint(secant[i - 1], secant[i]);
         }
     }
     for i in 0..n - 1 {
@@ -1005,7 +1002,7 @@ fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
             vec![],
             (0..3)
                 .map(|i| {
-                    let a = i as f64 * std::f64::consts::PI / 3.0;
+                    let a = f64::from(i) * std::f64::consts::PI / 3.0;
                     Shape::Line(
                         Point::new(-r * a.cos(), -r * a.sin()),
                         Point::new(r * a.cos(), r * a.sin()),
@@ -1017,16 +1014,16 @@ fn symbol_parts(sym: Symbol, r: f64) -> (Vec<Shape>, Vec<Shape>) {
 }
 
 /// One symbol at every one of `at`: a stamp per part, whatever the count.
-fn draw_symbols(d: &mut Draw, sym: Symbol, at: Vec<Point>, r: f64, color: Color, w: f64) {
+fn draw_symbols(d: &mut Draw, sym: Symbol, at: &[Point], r: f64, color: Color, w: f64) {
     if at.is_empty() {
         return;
     }
     let (filled, stroked) = symbol_parts(sym, r);
     for shape in filled {
-        d.stamp(shape, at.clone(), color);
+        d.stamp(shape, at.to_owned(), color);
     }
     for shape in stroked {
-        d.stamp_styled(shape, at.clone(), color, StrokeStyle::width(w));
+        d.stamp_styled(shape, at.to_owned(), color, StrokeStyle::width(w));
     }
 }
 
@@ -1081,7 +1078,7 @@ fn sector(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     let r_max = coord.radius(plot);
     let hole = match coord {
         Coordinate::Polar { hole, .. } => hole,
-        _ => 0.0,
+        Coordinate::Cartesian => 0.0,
     };
     let outer = r_max * p.mark.outer_radius;
     let inner = (r_max * hole).max(r_max * p.mark.inner_radius);
@@ -1158,11 +1155,11 @@ fn inset_wedge(gap: f64, a0: f64, a1: f64, inner: f64, outer: f64) -> Option<Ins
 }
 
 fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
+    use crate::mark::AnnotationPosition as AP;
     let Some(a) = &p.mark.annotation else { return };
     if a.text.is_empty() {
         return;
     }
-    use crate::mark::AnnotationPosition as AP;
     let Some(x) = center_x(p, r) else { return };
     // On a categorical y the mark IS the band, so the annotation keys off the category, not the
     // stacked value it does not have.
@@ -1262,15 +1259,15 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                 let radius = coord.radius(r.plot);
                 let hole = match coord {
                     Coordinate::Polar { hole, .. } => hole,
-                    _ => 0.0,
+                    Coordinate::Cartesian => 0.0,
                 };
                 let outer = radius * p.mark.outer_radius;
                 let inner = (radius * hole).max(radius * p.mark.inner_radius);
                 let start = coord.angle(p.v0 / total);
                 let end = coord.angle(p.v1 / total);
                 let w = inset_wedge(p.mark.angular_inset, start, end, inner, outer)?;
-                let mid = (start + end) * 0.5;
-                let rr = (outer + w.inner) * 0.5;
+                let mid = f64::midpoint(start, end);
+                let rr = f64::midpoint(outer, w.inner);
                 let at = Point::new(center.x + rr * mid.cos(), center.y + rr * mid.sin());
                 let number = p.mark.y.as_ref()?.datum.as_continuous()?;
                 return Some(crate::select::HitMark {
@@ -1294,14 +1291,10 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                         .as_ref()
                         .map(|v| v.datum.to_string())
                         .unwrap_or_default(),
-                    y_label: p
-                        .mark
-                        .selection_value
-                        .as_ref()
-                        .map(|v| v.label.clone())
-                        .unwrap_or_else(|| {
-                            crate::resolve::label_for(number, &r.y, paint.y_axis, y_step)
-                        }),
+                    y_label: p.mark.selection_value.as_ref().map_or_else(
+                        || crate::resolve::label_for(number, &r.y, paint.y_axis, y_step),
+                        |v| v.label.clone(),
+                    ),
                     value: number,
                 });
             }
@@ -1386,8 +1379,7 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                     .mark
                     .selection_value
                     .as_ref()
-                    .map(|v| v.label.clone())
-                    .unwrap_or(label),
+                    .map_or(label, |v| v.label.clone()),
                 value: p
                     .mark
                     .selection_value
@@ -1665,16 +1657,16 @@ mod corner_tests {
             coordinate: crate::coord::Coordinate::Cartesian,
             series_colors: &colors,
             label_size: 11.0,
-            font: Default::default(),
-            legend_insets: Default::default(),
-            plot_insets: Some(Default::default()),
+            font: day_spec::CanvasFont::default(),
+            legend_insets: crate::layout::Insets::default(),
+            plot_insets: Some(crate::layout::Insets::default()),
         };
         let resolved = resolve(marks, Size::new(400.0, 300.0), &cfg);
         let chrome = Chrome::for_dark(false);
         let paint = Paint2 {
             chrome: &chrome,
             label_size: 11.0,
-            font: Default::default(),
+            font: day_spec::CanvasFont::default(),
             x_axis: &xa,
             y_axis: &ya,
             series_colors: &colors,

@@ -45,6 +45,7 @@ const STACK_GAP: f64 = 24.0;
 /// chart reads on a printed page or in a document. A chart with its own [`Chrome`](crate::Chrome)
 /// keeps it.
 #[derive(Clone, Default)]
+#[must_use]
 pub struct ChartExports(Rc<Inner>);
 
 #[derive(Default)]
@@ -129,7 +130,7 @@ impl ChartExports {
                 for (draw, size) in draws.iter().zip(&sizes) {
                     d.transformed(Affine::translate(0.0, y), |d| {
                         d.clipped(Shape::Rect(Rect::from_size(*size)), |d| {
-                            draw(d, *size, false)
+                            draw(d, *size, false);
                         });
                     });
                     y += size.height + STACK_GAP;
@@ -139,7 +140,10 @@ impl ChartExports {
     }
 
     /// The charts as one PNG at `scale` pixels per point (see [`ChartExports::drawing`]).
-    /// `Err(ExportError::Invalid)` when no chart is registered.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ExportError::Invalid` when no chart is registered, or the platform encoder's error.
     pub async fn png(&self, scale: f64) -> Result<Vec<u8>, ExportError> {
         let drawing = self.drawing().ok_or(ExportError::Invalid)?;
         drawing.to_png(scale).await
@@ -147,6 +151,10 @@ impl ChartExports {
 
     /// The charts as one PDF, one page per chart at the chart's size, with `title` as the
     /// document title where the platform's writer records one.
+    ///
+    /// # Errors
+    ///
+    /// Returns the platform PDF writer's error.
     pub async fn pdf(&self, title: &str) -> Result<Vec<u8>, ExportError> {
         let mut doc = PdfDocument::new().title(title);
         for drawing in self.drawings() {

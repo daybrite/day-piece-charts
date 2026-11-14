@@ -17,7 +17,11 @@
 use day_spec::Color;
 
 fn rgb8(r: u8, g: u8, b: u8) -> Color {
-    Color::rgb(r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0)
+    Color::rgb(
+        f64::from(r) / 255.0,
+        f64::from(g) / 255.0,
+        f64::from(b) / 255.0,
+    )
 }
 
 /// The Okabe–Ito qualitative palette, in its published order.
@@ -57,7 +61,7 @@ pub fn sequential(t: f64) -> Color {
     let f = t - i as f64;
     let (r0, g0, b0) = P[i.min(P.len() - 1)];
     let (r1, g1, b1) = P[(i + 1).min(P.len() - 1)];
-    let mix = |a: u8, b: u8| a as f64 + (b as f64 - a as f64) * f;
+    let mix = |a: u8, b: u8| f64::from(a) + (f64::from(b) - f64::from(a)) * f;
     Color::rgb(
         mix(r0, r1) / 255.0,
         mix(g0, g1) / 255.0,
@@ -74,7 +78,7 @@ pub fn diverging(t: f64) -> Color {
     } else {
         ((247u8, 247u8, 247u8), (103u8, 0u8, 31u8), (t - 0.5) * 2.0)
     };
-    let mix = |x: u8, y: u8| x as f64 + (y as f64 - x as f64) * f;
+    let mix = |x: u8, y: u8| f64::from(x) + (f64::from(y) - f64::from(x)) * f;
     Color::rgb(
         mix(a.0, b.0) / 255.0,
         mix(a.1, b.1) / 255.0,

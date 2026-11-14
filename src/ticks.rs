@@ -6,7 +6,7 @@
 //! Choosing axis labels is a real optimization problem, not a loop that divides the range by five,
 //! and this module solves it the way the literature does. For a linear axis it runs the **extended
 //! Wilkinson algorithm** (Talbot, Lin & Hanrahan, *An Extension of Wilkinson's Algorithm for
-//! Positioning Tick Labels on Axes*, InfoVis 2010): search candidate label sequences and score each
+//! Positioning Tick Labels on Axes*, `InfoVis` 2010): search candidate label sequences and score each
 //! on four competing criteria, rather than picking the first that fits.
 //!
 //! - **simplicity**: humans read steps of 1, 5, 2, 2.5, 4, 3 (in that order of preference), and an
@@ -113,14 +113,14 @@ fn simplicity_max(q_index: usize, j: usize) -> f64 {
 
 fn coverage(dmin: f64, dmax: f64, l: f64, r: f64) -> f64 {
     let range = dmax - dmin;
-    1.0 - 0.5 * ((dmax - r).powi(2) + (dmin - l).powi(2)) / (0.1 * range).powi(2)
+    1.0 - f64::midpoint((dmax - r).powi(2), (dmin - l).powi(2)) / (0.1 * range).powi(2)
 }
 
 fn coverage_max(dmin: f64, dmax: f64, span: f64) -> f64 {
     let range = dmax - dmin;
     if span > range {
         let half = (span - range) / 2.0;
-        1.0 - 0.5 * (half * half + half * half) / (0.1 * range).powi(2)
+        1.0 - f64::midpoint(half * half, half * half) / (0.1 * range).powi(2)
     } else {
         1.0
     }
@@ -259,13 +259,16 @@ pub fn extended(domain: Interval, target: usize, fit: &LabelFit<'_>) -> Labellin
         j += 1;
     }
 
-    best.map(|(_, l)| l).unwrap_or_else(|| {
-        // Nothing scored: fall back to the endpoints, which is always a legal labelling.
-        Labelling {
-            values: vec![dmin, dmax],
-            step: dmax - dmin,
-        }
-    })
+    best.map_or_else(
+        || {
+            // Nothing scored: fall back to the endpoints, which is always a legal labelling.
+            Labelling {
+                values: vec![dmin, dmax],
+                step: dmax - dmin,
+            }
+        },
+        |(_, l)| l,
+    )
 }
 
 /// Decimal places a step of this size needs, so 0.1 does not print as `0.1000000000000000055`.
@@ -318,6 +321,10 @@ pub fn log_ticks(domain: Interval, base: f64, target: usize, fit: &LabelFit<'_>)
     let mut values = Vec::new();
     // Only subdivide when the decades alone would under-fill the axis; a log plot spanning eight
     // decades with 2s and 5s in each is unreadable.
+    #[expect(
+        clippy::float_cmp,
+        reason = "base ten is an exact constant the caller passes, not a computed value"
+    )]
     let subdivide = base == 10.0 && decades <= 3 && target > decades as usize;
     for e in e0..=e1 {
         let d = base.powi(e);
@@ -384,8 +391,8 @@ pub mod civil {
         let y = if m <= 2 { y - 1 } else { y };
         let era = if y >= 0 { y } else { y - 399 } / 400;
         let yoe = y - era * 400;
-        let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
-        let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+        let mp = i64::from(if m > 2 { m - 3 } else { m + 9 });
+        let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
         let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
         era * 146_097 + doe - 719_468
     }
@@ -449,8 +456,8 @@ pub fn time_ticks(domain: Interval, target: usize) -> Labelling {
     for st in TIME_STEPS {
         let approx = match st {
             TimeStep::Fixed(s) => *s,
-            TimeStep::Month(n) => *n as f64 * 30.44 * DAY,
-            TimeStep::Year(n) => *n as f64 * 365.2425 * DAY,
+            TimeStep::Month(n) => f64::from(*n) * 30.44 * DAY,
+            TimeStep::Year(n) => f64::from(*n) * 365.2425 * DAY,
         };
         if span / approx <= target as f64 {
             chosen = *st;
@@ -481,8 +488,8 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
             let (y0, m0, _) = civil::from_days((domain.lo / DAY).floor() as i64);
             // Snap to the step's own grid so quarterly ticks land on Jan/Apr/Jul/Oct rather than
             // wherever the data happens to start.
-            let mut month_index = y0 * 12 + (m0 as i64 - 1);
-            month_index -= month_index.rem_euclid(n as i64);
+            let mut month_index = y0 * 12 + (i64::from(m0) - 1);
+            month_index -= month_index.rem_euclid(i64::from(n));
             loop {
                 let y = month_index.div_euclid(12);
                 let m = month_index.rem_euclid(12) as u32 + 1;
@@ -493,12 +500,12 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
                 if t >= domain.lo {
                     out.push(t);
                 }
-                month_index += n as i64;
+                month_index += i64::from(n);
             }
         }
         TimeStep::Year(n) => {
             let (y0, _, _) = civil::from_days((domain.lo / DAY).floor() as i64);
-            let mut y = y0 - y0.rem_euclid(n as i64);
+            let mut y = y0 - y0.rem_euclid(i64::from(n));
             loop {
                 let t = civil::to_days(y, 1, 1) as f64 * DAY;
                 if t > domain.hi || out.len() >= 1000 {
@@ -507,7 +514,7 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
                 if t >= domain.lo {
                     out.push(t);
                 }
-                y += n as i64;
+                y += i64::from(n);
             }
         }
     }
@@ -518,7 +525,7 @@ fn walk(domain: Interval, step: TimeStep) -> Vec<f64> {
 /// axis spans hours, a date when it spans months, a bare year when it spans decades. Showing the
 /// full timestamp at every tick is what makes a time axis unreadable.
 fn time_fields(span: f64) -> day_localization::DateFields {
-    use day_localization::DateFields::*;
+    use day_localization::DateFields::{HourMinute, HourMinuteSecond, MonthDay, Year, YearMonth};
     if span < 2.0 * MINUTE {
         HourMinuteSecond
     } else if span < 2.0 * DAY {

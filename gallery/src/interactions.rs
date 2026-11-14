@@ -110,7 +110,7 @@ fn linked() -> AnyPiece {
                 res::str::inter_count(if selected.is_empty() {
                     0.0
                 } else {
-                    selected.state.with(|v| v.len()) as f64
+                    selected.state.with(std::vec::Vec::len) as f64
                 })
                 .format()
             })
@@ -197,7 +197,7 @@ fn waveform() -> Vec<Mark> {
                 value(res::str::inter_x().format(), i),
                 value(
                     res::str::inter_y().format(),
-                    50.0 + (i as f64 * 0.19).sin() * 25.0 + (i as f64 * 0.73).cos() * 10.0,
+                    50.0 + (f64::from(i) * 0.19).sin() * 25.0 + (f64::from(i) * 0.73).cos() * 10.0,
                 ),
             )
             .key(format!("wave-{i}"))
@@ -313,9 +313,10 @@ fn cells() -> AnyPiece {
         .grow(day::prelude::Dimension::Both),
         label(move || {
             inspection.with(|s| {
-                s.as_ref()
-                    .map(|s| s.values[0].label.clone())
-                    .unwrap_or_else(|| res::str::inter_cells_note().format())
+                s.as_ref().map_or_else(
+                    || res::str::inter_cells_note().format(),
+                    |s| s.values[0].label.clone(),
+                )
             })
         })
         .id(day::id!(cells_readout)),
@@ -328,7 +329,7 @@ fn zoom_by(parameter: IntervalSelection, factor: f64) {
     let x = parameter.x_domain().unwrap_or((0.0, 100.0));
     let y = parameter.y_domain().unwrap_or((0.0, 100.0));
     let zoom = |(a, b): (f64, f64)| {
-        let center = (a + b) * 0.5;
+        let center = f64::midpoint(a, b);
         Extent::Continuous(
             center + (a - center) / factor,
             center + (b - center) / factor,
@@ -483,8 +484,7 @@ fn inputs() -> AnyPiece {
                 .first()
                 .and_then(|r| r.fields.get("group"))
                 .and_then(Datum::as_continuous)
-                .map(|v| v as usize + 1)
-                .unwrap_or(0)
+                .map_or(0, |v| v as usize + 1)
         });
         picked.set_if_changed(index);
     });

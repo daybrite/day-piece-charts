@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 /// Stable series identity is separate from its localized or user-supplied display label.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use]
 pub struct LegendEntry {
     pub key: String,
     pub label: String,
@@ -43,6 +44,7 @@ impl LegendEntry {
     }
 }
 type Entries = Rc<dyn Fn() -> Vec<LegendEntry>>;
+#[must_use]
 pub struct Legend {
     entries: Entries,
     interaction: Option<PointBinding>,

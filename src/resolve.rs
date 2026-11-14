@@ -104,6 +104,10 @@ pub struct Config<'a> {
 }
 
 /// A stable key for "the same x position", used to group marks for stacking and dodging.
+#[expect(
+    clippy::ref_option,
+    reason = "callers pass a borrowed `Option<Value>` field as it is"
+)]
 pub(crate) fn key_of(v: &Option<crate::data::Value>) -> String {
     match v {
         Some(v) => match &v.datum {
@@ -359,7 +363,7 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
                 .map(|v| v.datum.clone())
                 .collect::<Vec<_>>()
         })
-        .filter(|d| d.is_finite())
+        .filter(super::data::Datum::is_finite)
         .collect();
     let mut y_data: Vec<Datum> = Vec::new();
     for p in &placed {
@@ -580,7 +584,7 @@ fn place_ticks(ticks: &mut [Tick], s: &Scale) {
 
 /// Half of an end label hangs past the plot's edge; reserve it so it is not clipped.
 fn x_overhang(tick: Option<&Tick>, measure: &dyn Fn(&str) -> f64) -> f64 {
-    tick.map(|t| measure(&t.label) / 2.0 + 4.0).unwrap_or(4.0)
+    tick.map_or(4.0, |t| measure(&t.label) / 2.0 + 4.0)
 }
 
 /// The smallest positive difference between any two of the values, or `None` with fewer than two
@@ -816,7 +820,7 @@ pub(crate) fn label_for(v: f64, scale: &Scale, spec: &AxisSpec, step: f64) -> St
 
 /// The domain a continuous axis would infer, exposed for a caller that needs it before rendering.
 pub fn domain_of(data: &[Datum]) -> Interval {
-    let mut it = data.iter().filter_map(|d| d.as_continuous());
+    let mut it = data.iter().filter_map(super::data::Datum::as_continuous);
     match it.next() {
         Some(first) => {
             let mut iv = Interval::new(first, first);

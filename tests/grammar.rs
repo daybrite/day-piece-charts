@@ -127,7 +127,7 @@ fn a_monthly_time_axis_lands_on_the_first_of_the_month() {
     let start = civil::to_days(2024, 1, 15) as f64 * 86_400.0;
     let end = civil::to_days(2024, 12, 20) as f64 * 86_400.0;
     let l = ticks::time_ticks(Interval::new(start, end), 6);
-    assert!(!l.values.is_empty());
+    assert_ne!(l.values, [] as [f64; 0]);
     for v in &l.values {
         let (_, _, day) = civil::from_days((v / 86_400.0).floor() as i64);
         assert_eq!(day, 1, "tick at {v} is not the first of a month");
@@ -426,8 +426,8 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
@@ -451,8 +451,8 @@ fn log_y_ticks(marks: Vec<Mark>, top: f64) -> Vec<day_piece_charts::ticks::Tick>
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
@@ -472,8 +472,8 @@ fn y_ticks(marks: Vec<Mark>) -> Vec<day_piece_charts::ticks::Tick> {
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
@@ -499,8 +499,8 @@ fn a_bar_chart_always_includes_its_baseline() {
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg);
@@ -549,8 +549,8 @@ fn sectors_stack_by_default_so_a_pie_sweeps_a_whole_turn() {
         coordinate: Coordinate::polar(),
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(300.0, 300.0), &cfg);
@@ -575,8 +575,8 @@ fn resolve_default(marks: Vec<Mark>, size: day_spec::Size) -> day_piece_charts::
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     day_piece_charts::resolve::resolve(marks, size, &cfg)
@@ -637,7 +637,7 @@ fn bars_on_a_continuous_axis_are_as_wide_as_their_closest_pair_allows() {
     // Daily bars on a time axis: the gap is a day, whatever the axis spans.
     let day = 86_400.0;
     let marks: Vec<Mark> = (0..10)
-        .map(|i| bar(time("Date", i as f64 * day), value("Volume", 5.0)))
+        .map(|i| bar(time("Date", f64::from(i) * day), value("Volume", 5.0)))
         .collect();
     let r = resolve_default(marks, day_spec::Size::new(400.0, 300.0));
     assert!(!r.x.kind.is_discrete());
@@ -676,8 +676,8 @@ fn a_trailing_y_axis_moves_its_margin_to_the_trailing_edge() {
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     let trailing = day_piece_charts::resolve::resolve(marks(), size, &cfg);
@@ -711,8 +711,8 @@ fn fixed_insets_replace_the_measured_margins() {
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: Some(Insets::uniform(2.0)),
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(100.0, 50.0), &cfg);
@@ -751,15 +751,15 @@ fn categorical_cells_and_horizontal_bars_supply_interactive_values() {
         coordinate: Coordinate::Cartesian,
         series_colors: &colors,
         label_size: 11.0,
-        font: Default::default(),
-        legend_insets: Default::default(),
+        font: day_spec::CanvasFont::default(),
+        legend_insets: Insets::default(),
         plot_insets: None,
     };
     let chrome = Chrome::for_dark(false);
     let paint = render::Paint2 {
         chrome: &chrome,
         label_size: 11.0,
-        font: Default::default(),
+        font: day_spec::CanvasFont::default(),
         x_axis: &axis,
         y_axis: &axis,
         series_colors: &colors,

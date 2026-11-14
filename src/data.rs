@@ -55,8 +55,7 @@ impl Datum {
 impl fmt::Display for Datum {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Datum::Number(v) => write!(f, "{v}"),
-            Datum::Time(v) => write!(f, "{v}"),
+            Datum::Number(v) | Datum::Time(v) => write!(f, "{v}"),
             Datum::Category(s) => f.write_str(s),
         }
     }
@@ -71,6 +70,7 @@ pub trait IntoDatum {
 macro_rules! datum_from_number {
     ($($t:ty),*) => {$(
         impl IntoDatum for $t {
+            #[allow(clippy::cast_lossless, reason = "the macro also covers integer types that `f64::from` does not accept")]
             fn into_datum(self) -> Datum { Datum::Number(self as f64) }
         }
     )*};
@@ -182,6 +182,7 @@ impl Interval {
     }
 
     /// Grow to contain `other`.
+    #[must_use]
     pub fn union(self, other: Interval) -> Interval {
         Interval {
             lo: self.lo.min(other.lo),
@@ -192,6 +193,7 @@ impl Interval {
     /// A domain with no width cannot be projected: every value would land on the same pixel and
     /// the scale would divide by zero. Widen it symmetrically instead, by a unit related to the
     /// value itself so the padding is sensible at any magnitude.
+    #[must_use]
     pub fn nondegenerate(self) -> Interval {
         if self.span() > 0.0 {
             return self;

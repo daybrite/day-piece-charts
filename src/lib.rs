@@ -109,6 +109,7 @@ type ConfigureFn = Rc<dyn Fn(&mut ChartConfig)>;
 
 /// A chart. Build it with [`chart`], configure it with the builder methods, and place it like any
 /// other piece: it grows to fill, so give it a `.frame(w, h)` or let its container size it.
+#[must_use]
 pub struct Chart {
     marks: Rc<dyn Fn() -> Vec<Mark>>,
     x_scale: ScaleSpec,
@@ -523,7 +524,7 @@ fn legend_layout(
             })
         }
         _ => {
-            let w = widths.iter().cloned().fold(0.0f64, f64::max) + 12.0;
+            let w = widths.iter().copied().fold(0.0f64, f64::max) + 12.0;
             let leading = pos == LegendPosition::Leading;
             Some(LegendBox {
                 insets: if leading {
@@ -1139,7 +1140,7 @@ impl Piece for Chart {
                                     }
                                 }
                             }
-                            _ => {}
+                            Interaction::Viewport(_) => {}
                         }
                     }
                 }
@@ -1163,7 +1164,7 @@ impl Piece for Chart {
                             Interaction::Point(point) if point.trigger == EventSource::Hover => {
                                 point.parameter.replace(
                                     model.record_at(drag.location, point.snap).map(|h| h.record),
-                                )
+                                );
                             }
                             Interaction::Brush(brush) => interaction::drag_brush(
                                 *brush,
@@ -1258,7 +1259,7 @@ impl Piece for Chart {
                                 Interaction::Point(p) => p.parameter.clear(),
                                 Interaction::Brush(b) => b.parameter.clear(),
                                 Interaction::Viewport(v) => v.parameter.clear(),
-                                _ => {}
+                                Interaction::Links(_) => {}
                             }
                         }
                     }

@@ -105,8 +105,8 @@ pub(crate) enum Fallback {
 
 /// The table of per-kind behavior.
 pub(crate) fn motion(kind: MarkKind) -> Motion {
-    use Absent::*;
-    use MatchBy::*;
+    use Absent::{Fade, Grow, OnSeries, OnTracedSeries, Sweep};
+    use MatchBy::{Encoding, EncodingOrPlace, Series};
     let row = |matched_by, absent, traces| Motion {
         matched_by,
         absent,
@@ -149,18 +149,26 @@ pub struct Identity {
     what: String,
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "callers pass a borrowed `Option<Value>` field as it is"
+)]
 fn value_key(v: &Option<Value>) -> String {
     match v.as_ref().map(|v| &v.datum) {
         Some(Datum::Category(s)) => format!("c{s}"),
-        Some(Datum::Number(n)) | Some(Datum::Time(n)) => format!("n{:x}", n.to_bits()),
+        Some(Datum::Number(n) | Datum::Time(n)) => format!("n{:x}", n.to_bits()),
         None => String::new(),
     }
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "callers pass a borrowed `Option<Value>` field as it is"
+)]
 fn continuous(v: &Option<Value>) -> bool {
     matches!(
         v.as_ref().map(|v| &v.datum),
-        Some(Datum::Number(_)) | Some(Datum::Time(_))
+        Some(Datum::Number(_) | Datum::Time(_))
     )
 }
 
@@ -207,6 +215,10 @@ fn lerp_datum(a: &Datum, b: &Datum, t: f64) -> Datum {
     }
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "callers pass a borrowed `Option<Value>` field as it is"
+)]
 fn lerp_value(a: &Option<Value>, b: &Option<Value>, t: f64) -> Option<Value> {
     match (a, b) {
         (Some(a), Some(b)) => Some(Value {
@@ -308,6 +320,10 @@ fn anchor(cat: &str, own: &Scale, other: &Scale) -> Option<f64> {
         .find_map(|c| project(c))
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "callers pass a borrowed `Option<Value>` field as it is"
+)]
 fn category(v: &Option<Value>) -> Option<&str> {
     match v.as_ref().map(|v| &v.datum) {
         Some(Datum::Category(c)) => Some(c),
@@ -461,10 +477,10 @@ fn phantom(p: &Placed, own: &Resolved, other: &Resolved, index: &SeriesIndex) ->
         Absent::Grow => {
             let spanned = p.mark.x_end.is_some() || p.mark.y_end.is_some();
             if p.mark.x_end.is_some() {
-                q.mark.x_end = q.mark.x.clone();
+                q.mark.x_end.clone_from(&q.mark.x);
             }
             if p.mark.y_end.is_some() {
-                q.mark.y_end = q.mark.y.clone();
+                q.mark.y_end.clone_from(&q.mark.y);
             }
             if continuous(&p.mark.y) {
                 q.v1 = q.v0;
@@ -474,7 +490,7 @@ fn phantom(p: &Placed, own: &Resolved, other: &Resolved, index: &SeriesIndex) ->
         }
         Absent::Sweep => {
             if p.mark.y_end.is_some() {
-                q.mark.y_end = q.mark.y.clone();
+                q.mark.y_end.clone_from(&q.mark.y);
             }
             q.v1 = q.v0;
         }
@@ -600,7 +616,7 @@ impl Transition {
                 series.len() - 1
             });
         }
-        from.series = series.clone();
+        from.series.clone_from(&series);
         let traced: Vec<usize> = from
             .marks
             .iter()
@@ -613,9 +629,10 @@ impl Transition {
             &from.marks,
             &to.marks,
             |p| identity(p, &traced),
-            |p, change| match change {
-                Change::Entering => phantom(p, &to, &from, &along_from),
-                _ => {
+            |p, change| {
+                if change == Change::Entering {
+                    phantom(p, &to, &from, &along_from)
+                } else {
                     let mut gone = phantom(p, &from, &to, &along_to);
                     // Whatever else it does on the way out, a leaving mark is gone at the end
                     // (its slot may already belong to another category), unless it is a sample
@@ -665,7 +682,7 @@ impl Transition {
             .map(|s| s.map(|(va, vb)| lerp(va, vb, t)))
             .collect();
         restack(&mut marks, &values);
-        out.series = self.series.clone();
+        out.series.clone_from(&self.series);
         out.marks = marks;
         out
     }
@@ -704,9 +721,9 @@ mod tests {
             coordinate,
             series_colors: &colors,
             label_size: 11.0,
-            font: Default::default(),
-            legend_insets: Default::default(),
-            plot_insets: Some(Default::default()),
+            font: day_spec::CanvasFont::default(),
+            legend_insets: crate::layout::Insets::default(),
+            plot_insets: Some(crate::layout::Insets::default()),
         };
         resolve(marks, Size::new(400.0, 300.0), &cfg)
     }
@@ -779,7 +796,7 @@ mod tests {
         let a = pie(&[("Search", 50.0), ("Direct", 50.0)]);
         let b = pie(&[("Search", 40.0), ("Direct", 30.0), ("Email", 30.0)]);
         for step in 0..=10 {
-            let r = blend(&a, &b, step as f64 / 10.0);
+            let r = blend(&a, &b, f64::from(step) / 10.0);
             let mut spans: Vec<(f64, f64)> = r.marks.iter().map(|p| (p.v0, p.v1)).collect();
             spans.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
             for w in spans.windows(2) {

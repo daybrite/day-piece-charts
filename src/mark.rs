@@ -211,6 +211,7 @@ impl Default for MarkStyle {
 
 /// One mark: a kind, its position encodings, and its style.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use]
 pub struct Mark {
     pub fields: std::collections::BTreeMap<String, crate::Datum>,
     pub link: Option<String>,
@@ -253,7 +254,7 @@ impl Mark {
     fn new(kind: MarkKind) -> Self {
         Mark {
             kind,
-            fields: Default::default(),
+            fields: std::collections::BTreeMap::default(),
             link: None,
             x: None,
             x_end: None,
@@ -446,7 +447,7 @@ impl Mark {
                     text: String::new(),
                     position: AnnotationPosition::Automatic,
                     color: Some(color),
-                })
+                });
             }
         }
         self
