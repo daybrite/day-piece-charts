@@ -296,8 +296,7 @@ pub fn export_pdf(page: ChartPage) {
     let title = pages()
         .into_iter()
         .find(|e| e.page == page)
-        .map(|e| (e.title)().format())
-        .unwrap_or_default();
+        .map_or_default(|e| (e.title)().format());
     day::task(async move {
         let name = format!("{}.pdf", page.key());
         let result = exports.pdf(&title).await;

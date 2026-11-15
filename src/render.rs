@@ -1289,8 +1289,7 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                         .mark
                         .series
                         .as_ref()
-                        .map(|v| v.datum.to_string())
-                        .unwrap_or_default(),
+                        .map_or_default(|v| v.datum.to_string()),
                     y_label: p.mark.selection_value.as_ref().map_or_else(
                         || crate::resolve::label_for(number, &r.y, paint.y_axis, y_step),
                         |v| v.label.clone(),

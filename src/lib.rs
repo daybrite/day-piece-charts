@@ -818,7 +818,7 @@ impl Spec {
                 .collect()
         };
         let legend = legend_layout(&series, self.legend, size, self.label_size, &self.font);
-        let legend_insets = legend.as_ref().map(|l| l.insets).unwrap_or_default();
+        let legend_insets = legend.as_ref().map_or_default(|l| l.insets);
 
         let cfg = resolve::Config {
             x_scale: &x_scale,

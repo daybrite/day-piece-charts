@@ -5,6 +5,7 @@ use day_piece_charts::{self as ch, *};
 use day_pieces::prelude::*;
 use day_reactive::flush_sync;
 use day_spec::{DrawOp, WindowOptions};
+use std::assert_matches;
 
 fn boot(root: impl FnOnce() -> AnyPiece + 'static) -> MockProbe {
     day_core::uninstall_tree();
@@ -57,7 +58,7 @@ fn charts_built_inside_exports_register_and_record_a_still() {
     assert_eq!(drawings.len(), 2);
     assert_eq!(drawings[0].size(), Size::new(300.0, 200.0));
     assert_eq!(drawings[1].size(), Size::new(200.0, 100.0));
-    assert!(matches!(drawings[0].ops().first(), Some(DrawOp::Fill(..))));
+    assert_matches!(drawings[0].ops().first(), Some(DrawOp::Fill(..)));
     assert!(drawings[0].ops().len() > 3, "the still drew the chart");
 
     // Stacked: the widest chart's width, both heights plus the gap between them.

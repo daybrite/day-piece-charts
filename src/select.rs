@@ -268,8 +268,7 @@ impl HitModel {
                     .marks
                     .iter()
                     .find(|m| (m.at.x - target).abs() < 1.0)
-                    .map(|m| m.x_label.clone())
-                    .unwrap_or_default();
+                    .map_or_default(|m| m.x_label.clone());
                 (!values.is_empty()).then_some(Selection {
                     at: Point::new(target, p.y),
                     x_label,
