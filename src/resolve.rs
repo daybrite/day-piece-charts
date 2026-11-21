@@ -84,6 +84,13 @@ pub struct Resolved {
     /// Clip the marks to the plot along both axes. Set for the frames of a transition, when a
     /// mark sliding in along a widening axis starts outside it.
     pub clip_plot: bool,
+    /// Device points one unit of a ridge's height stands above its row ([`Mark::ridge`]): the
+    /// tallest ridge spans the configured overlap of rows. Zero in a chart with no ridges.
+    pub ridge_unit: f64,
+    /// How much of the plot's width the marks are revealed across, from the leading edge: 1 is
+    /// the whole chart, and a frame of a sweeping entrance
+    /// ([`Entrance::Sweep`](crate::Entrance::Sweep)) is less.
+    pub reveal: f64,
 }
 
 /// What the chart was configured with, gathered so the pipeline takes one argument.
@@ -101,6 +108,8 @@ pub struct Config<'a> {
     /// Fixed margins in place of the measured ones (`Chart::plot_insets`). The legend's space is
     /// added on top either way.
     pub plot_insets: Option<Insets>,
+    /// How many rows the tallest ridge spans ([`Chart::ridge_overlap`](crate::Chart::ridge_overlap)).
+    pub ridge_overlap: f64,
 }
 
 /// A stable key for "the same x position", used to group marks for stacking and dodging.
@@ -235,11 +244,14 @@ fn place(marks: Vec<Mark>, series: &[String]) -> Vec<Placed> {
             None => (0, 1),
         };
 
-        // The value channel: y for a vertical mark, and the whole quantity for a sector.
-        let value =
-            m.y.as_ref()
-                .and_then(|v| v.datum.as_continuous())
-                .unwrap_or(0.0);
+        // The value channel: y for a vertical mark, the whole quantity for a sector, and the
+        // height of a ridge, whose y names its row.
+        let value = m
+            .rise
+            .as_ref()
+            .or(m.y.as_ref())
+            .and_then(|v| v.datum.as_continuous())
+            .unwrap_or(0.0);
         let explicit_end = m.y_end.as_ref().and_then(|v| v.datum.as_continuous());
 
         // An explicit range opts out of stacking entirely: the app said where both edges go. A
@@ -370,6 +382,12 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         if p.mark.kind == MarkKind::Sector {
             continue; // a sector's quantity is angular; it never sizes the y axis
         }
+        // A mark with no y (a vertical rule, a band between two x values) spans the axis and
+        // must not size it: its placeholder zero would drag a floating domain down to the
+        // baseline.
+        if p.mark.y.is_none() {
+            continue;
+        }
         // A categorical y (the rows of a heat map) is a band like a categorical x: the
         // category itself is the datum, and the stacked bounds (which are zero for it) must not
         // reach the scale, or the inferred band would gain a phantom "0" row.
@@ -393,6 +411,8 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         placed
             .iter()
             .filter(|p| matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle))
+            // A mark with its own x span says how wide it is; only the others share out the axis.
+            .filter(|p| p.mark.x_end.is_none())
             .filter_map(|p| p.mark.x.as_ref()?.datum.as_continuous()),
     );
     // A rule with no y is a vertical rule: it spans the axis and must not size it.
@@ -507,6 +527,13 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
     };
     let plot = insets.apply(size);
     let (x, y) = scales(&placed, &x_data, &y_data, &x_spec, &y_spec, plot);
+    // Only a domain the app pinned clips the marks to the plot. One this pipeline rounded out
+    // to nice bounds contains the data by construction, and clipping to it would cut the far
+    // half off a point on the last sample.
+    let (mut x, mut y) = (x, y);
+    x.explicit_domain = cfg.x_scale.domain.is_some();
+    y.explicit_domain = cfg.y_scale.domain.is_some();
+    let ridge_unit = fit_ridges(&placed, &mut y, cfg.ridge_overlap);
     let mut x_ticks = axis_ticks(&x, cfg.x_axis, plot.size.width, cfg, true);
     let mut y_ticks = axis_ticks(&y, cfg.y_axis, plot.size.height, cfg, false);
     place_ticks(&mut x_ticks, &x);
@@ -537,7 +564,45 @@ pub fn resolve(marks: Vec<Mark>, size: Size, cfg: &Config<'_>) -> Resolved {
         y_title,
         x_gap,
         clip_plot: false,
+        ridge_unit,
+        reveal: 1.0,
     }
+}
+
+/// Make room for ridges ([`Mark::ridge`]) on a discrete y axis, and answer how many device
+/// points one unit of height stands for.
+///
+/// A ridge stands on its row's center line and the tallest one reaches `overlap` rows up, so
+/// the rows are packed into less than the plot: the first row sits low enough for its own
+/// ridge to stay inside, and the last one's base lands on the plot's floor, where the x axis
+/// is. Zero when the chart has no ridges.
+fn fit_ridges(placed: &[Placed], y: &mut Scale, overlap: f64) -> f64 {
+    let tallest = placed
+        .iter()
+        .filter(|p| p.mark.rise.is_some())
+        .map(|p| p.v1.abs())
+        .fold(0.0_f64, f64::max);
+    if tallest <= 0.0 || !y.kind.is_discrete() || y.categories.is_empty() {
+        return 0.0;
+    }
+    let overlap = overlap.max(0.1);
+    let (top, bottom) = (y.range.0.min(y.range.1), y.range.0.max(y.range.1));
+    let rows = y.categories.len() as f64;
+    let step = (bottom - top) / (rows + overlap - 1.0).max(1e-9);
+    // Evenly spaced rows with their centers `step` apart: the center of row `i` is
+    // `top + (overlap + i) * step`, so the last one is on `bottom`.
+    y.padding = crate::scale::BandPadding {
+        inner: 0.0,
+        outer: 0.0,
+        align: 0.5,
+    };
+    let (new_top, new_bottom) = (top + (overlap - 0.5) * step, bottom + 0.5 * step);
+    y.range = if y.range.0 <= y.range.1 {
+        (new_top, new_bottom)
+    } else {
+        (new_bottom, new_top)
+    };
+    overlap * step / tallest
 }
 
 /// A mark's slot on a discrete x axis: its category's band, split between the dodging group and

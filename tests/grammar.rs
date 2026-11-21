@@ -429,6 +429,7 @@ fn resolved(marks: Vec<Mark>, stacking: Stacking) -> Vec<day_piece_charts::resol
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).marks
 }
@@ -454,6 +455,7 @@ fn log_y_ticks(marks: Vec<Mark>, top: f64) -> Vec<day_piece_charts::ticks::Tick>
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
 }
@@ -475,6 +477,7 @@ fn y_ticks(marks: Vec<Mark>) -> Vec<day_piece_charts::ticks::Tick> {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg).y_ticks
 }
@@ -502,6 +505,7 @@ fn a_bar_chart_always_includes_its_baseline() {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(400.0, 300.0), &cfg);
     assert!(
@@ -552,6 +556,7 @@ fn sectors_stack_by_default_so_a_pie_sweeps_a_whole_turn() {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(300.0, 300.0), &cfg);
     let bounds: Vec<(f64, f64)> = r.marks.iter().map(|p| (p.v0, p.v1)).collect();
@@ -578,6 +583,7 @@ fn resolve_default(marks: Vec<Mark>, size: day_spec::Size) -> day_piece_charts::
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     day_piece_charts::resolve::resolve(marks, size, &cfg)
 }
@@ -679,6 +685,7 @@ fn a_trailing_y_axis_moves_its_margin_to_the_trailing_edge() {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     let trailing = day_piece_charts::resolve::resolve(marks(), size, &cfg);
     // The label column is the same width either way; it just changes sides.
@@ -714,6 +721,7 @@ fn fixed_insets_replace_the_measured_margins() {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: Some(Insets::uniform(2.0)),
+        ridge_overlap: 1.5,
     };
     let r = day_piece_charts::resolve::resolve(marks, day_spec::Size::new(100.0, 50.0), &cfg);
     assert_eq!(r.plot, day_spec::Rect::new(2.0, 2.0, 96.0, 46.0));
@@ -754,6 +762,7 @@ fn categorical_cells_and_horizontal_bars_supply_interactive_values() {
         font: day_spec::CanvasFont::default(),
         legend_insets: Insets::default(),
         plot_insets: None,
+        ridge_overlap: 1.5,
     };
     let chrome = Chrome::for_dark(false);
     let paint = render::Paint2 {
@@ -763,6 +772,7 @@ fn categorical_cells_and_horizontal_bars_supply_interactive_values() {
         x_axis: &axis,
         y_axis: &axis,
         series_colors: &colors,
+        ground: None,
     };
     let cells = resolve::resolve(
         vec![

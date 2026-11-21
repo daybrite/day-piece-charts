@@ -85,15 +85,18 @@ pub(crate) enum Absent {
     /// On the other chart's picture of its own series at its x, so a line's new samples slide out
     /// along the old line. With no such series, `otherwise`.
     OnSeries { otherwise: Fallback },
-    /// On the traced series it marks (a dot rides its line), faded out.
+    /// On the traced series it marks (a dot rides its line), faded out. A dot at the far end of
+    /// a range (a rule or a bar between two x values on its row) rides that instead: it starts
+    /// on the range's near end, which is how a dumbbell's dot travels.
     OnTracedSeries,
     /// Grown from nothing: an explicit span collapses onto its start, a value onto its baseline,
     /// and a cell with neither (a heat-map cell on two categorical axes) fades.
     Grow,
     /// Swept from nothing: a wedge's value, which is its angle, collapses.
     Sweep,
-    /// Faded out in place.
-    Fade,
+    /// Drawn out from nothing: a rule between two values collapses onto its start, and one
+    /// that spans the plot fades.
+    Extend,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -105,7 +108,7 @@ pub(crate) enum Fallback {
 
 /// The table of per-kind behavior.
 pub(crate) fn motion(kind: MarkKind) -> Motion {
-    use Absent::{Fade, Grow, OnSeries, OnTracedSeries, Sweep};
+    use Absent::{Extend, Grow, OnSeries, OnTracedSeries, Sweep};
     use MatchBy::{Encoding, EncodingOrPlace, Series};
     let row = |matched_by, absent, traces| Motion {
         matched_by,
@@ -130,7 +133,7 @@ pub(crate) fn motion(kind: MarkKind) -> Motion {
         MarkKind::Point => row(EncodingOrPlace, OnTracedSeries, false),
         MarkKind::Bar | MarkKind::Rectangle => row(Encoding, Grow, false),
         MarkKind::Sector => row(Series, Sweep, false),
-        MarkKind::Rule => row(Encoding, Fade, false),
+        MarkKind::Rule => row(Encoding, Extend, false),
     }
 }
 
@@ -372,7 +375,9 @@ type Samples = Vec<(f64, f64, f64)>;
 /// Every traced series of one chart, sorted along x, so a transition can read "where was this
 /// series at x" for thousands of entering samples without rescanning the chart for each.
 struct SeriesIndex {
-    series: HashMap<(u8, usize), Samples>,
+    /// By mark kind, series and row: a ridge is a series along its own row of a categorical y,
+    /// and every other series has the empty row.
+    series: HashMap<(u8, usize, String), Samples>,
     names: Vec<String>,
     categories: HashMap<String, usize>,
 }
@@ -385,7 +390,7 @@ impl SeriesIndex {
                 .enumerate()
                 .map(|(i, c)| (c.clone(), i))
                 .collect();
-        let mut series: HashMap<(u8, usize), Samples> = HashMap::new();
+        let mut series: HashMap<(u8, usize, String), Samples> = HashMap::new();
         for p in r.marks.iter().filter(|p| motion(p.mark.kind).traces) {
             let pos = match p.mark.x.as_ref().map(|v| &v.datum) {
                 Some(Datum::Category(c)) => match categories.get(c) {
@@ -399,7 +404,7 @@ impl SeriesIndex {
                 None => continue,
             };
             series
-                .entry((p.mark.kind as u8, p.series_index))
+                .entry((p.mark.kind as u8, p.series_index, row_of(&p.mark)))
                 .or_default()
                 .push((pos, p.v0, p.v1));
         }
@@ -417,9 +422,9 @@ impl SeriesIndex {
     /// around it, or the nearest end outside them. A category this chart does not have reads the
     /// series' last sample, which is where a series grows from when it gains a category. `None`
     /// when this chart has no such series.
-    fn at(&self, kind: MarkKind, series: &str, x: &Datum) -> Option<(f64, f64)> {
+    fn at(&self, kind: MarkKind, series: &str, row: &str, x: &Datum) -> Option<(f64, f64)> {
         let si = self.names.iter().position(|s| s == series).unwrap_or(0);
-        let pts = self.series.get(&(kind as u8, si))?;
+        let pts = self.series.get(&(kind as u8, si, row.to_string()))?;
         let (first, last) = (*pts.first()?, *pts.last()?);
         let x = match x {
             Datum::Category(c) => match self.categories.get(c) {
@@ -445,11 +450,37 @@ impl SeriesIndex {
     }
 
     /// The values any traced series named `series` takes at `x`, for a mark riding it.
-    fn any_at(&self, series: &str, x: &Datum) -> Option<(f64, f64)> {
+    fn any_at(&self, series: &str, row: &str, x: &Datum) -> Option<(f64, f64)> {
         [MarkKind::Line, MarkKind::Area]
             .into_iter()
-            .find_map(|k| self.at(k, series, x))
+            .find_map(|k| self.at(k, series, row, x))
     }
+}
+
+/// The row a ridge mark is a series along: its categorical y. Empty for every other mark.
+fn row_of(m: &Mark) -> String {
+    match (&m.rise, category(&m.y)) {
+        (Some(_), Some(row)) => row.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The near end of the range `p` sits at the far end of: a rule or a bar between two x values
+/// on the same row (or with the same y value) whose end is `p`'s x. `None` when `p` ends no
+/// range.
+fn range_start(p: &Placed, own: &Resolved) -> Option<Value> {
+    let x = p.mark.x.as_ref()?.datum.as_continuous()?;
+    own.marks
+        .iter()
+        .filter(|q| matches!(q.mark.kind, MarkKind::Rule | MarkKind::Bar))
+        .filter(|q| value_key(&q.mark.y) == value_key(&p.mark.y))
+        .find_map(|q| {
+            let end = q.mark.x_end.as_ref()?.datum.as_continuous()?;
+            let start = q.mark.x.as_ref()?;
+            (end.to_bits() == x.to_bits()
+                && start.datum.as_continuous()?.to_bits() != end.to_bits())
+            .then(|| start.clone())
+        })
 }
 
 /// Where a mark that is not in `other` comes from (entering) or goes to (leaving), expressed as
@@ -461,16 +492,20 @@ fn phantom(p: &Placed, own: &Resolved, other: &Resolved, index: &SeriesIndex) ->
     let x = p.mark.x.as_ref().map(|v| &v.datum);
     let fade = |q: &mut Placed| q.mark.style.opacity = 0.0;
     match motion(p.mark.kind).absent {
-        Absent::OnSeries { otherwise } => match x.and_then(|x| index.at(p.mark.kind, &series, x)) {
-            Some((v0, v1)) => (q.v0, q.v1) = (v0, v1),
-            None => match otherwise {
-                Fallback::Fade => fade(&mut q),
-                Fallback::Baseline => q.v1 = q.v0,
-            },
-        },
+        Absent::OnSeries { otherwise } => {
+            match x.and_then(|x| index.at(p.mark.kind, &series, &row_of(&p.mark), x)) {
+                Some((v0, v1)) => (q.v0, q.v1) = (v0, v1),
+                None => match otherwise {
+                    Fallback::Fade => fade(&mut q),
+                    Fallback::Baseline => q.v1 = q.v0,
+                },
+            }
+        }
         Absent::OnTracedSeries => {
-            if let Some((_, v1)) = x.and_then(|x| index.any_at(&series, x)) {
+            if let Some((_, v1)) = x.and_then(|x| index.any_at(&series, &row_of(&p.mark), x)) {
                 q.v1 = v1;
+            } else if let Some(start) = range_start(p, own) {
+                q.mark.x = Some(start);
             }
             fade(&mut q);
         }
@@ -494,7 +529,18 @@ fn phantom(p: &Placed, own: &Resolved, other: &Resolved, index: &SeriesIndex) ->
             }
             q.v1 = q.v0;
         }
-        Absent::Fade => fade(&mut q),
+        Absent::Extend => {
+            let spanned = p.mark.x_end.is_some() || p.mark.y_end.is_some();
+            if p.mark.x_end.is_some() {
+                q.mark.x_end.clone_from(&q.mark.x);
+            }
+            if p.mark.y_end.is_some() {
+                q.mark.y_end.clone_from(&q.mark.y);
+            }
+            if !spanned {
+                fade(&mut q);
+            }
+        }
     }
     // Along a discrete axis, where it would sit in the other chart: its own slot there if the
     // category exists in both, else beside the nearest category both share ([`anchor`]), keeping
@@ -536,6 +582,7 @@ fn blend_mark(a: &Placed, ra: &Resolved, b: &Placed, rb: &Resolved, t: f64) -> P
     m.x_end = lerp_value(&a.mark.x_end, &b.mark.x_end, t);
     m.y = lerp_value(&a.mark.y, &b.mark.y, t);
     m.y_end = lerp_value(&a.mark.y_end, &b.mark.y_end, t);
+    m.rise = lerp_value(&a.mark.rise, &b.mark.rise, t);
     let (sa, sb) = (&a.mark.style, &b.mark.style);
     m.style.fill = lerp_color(sa.fill, sb.fill, t);
     m.style.gradient = match (sa.gradient, sb.gradient) {
@@ -671,6 +718,14 @@ impl Transition {
         out.plot = from.plot.lerp(&to.plot, t);
         out.x = blend_scale(&from.x, &to.x, t);
         out.y = blend_scale(&from.y, &to.y, t);
+        // A chart gaining its first ridge has no unit to start from, and takes the arriving one.
+        out.ridge_unit = if from.ridge_unit > 0.0 {
+            lerp(from.ridge_unit, to.ridge_unit, t)
+        } else {
+            to.ridge_unit
+        };
+        // Clamped: a spring's overshoot must not reveal more than the whole chart.
+        out.reveal = lerp(from.reveal, to.reveal, t).clamp(0.0, 1.0);
         out.x_ticks = self.x_ticks.at(t);
         out.y_ticks = self.y_ticks.at(t);
         let mut marks = self
@@ -724,6 +779,7 @@ mod tests {
             font: day_spec::CanvasFont::default(),
             legend_insets: crate::layout::Insets::default(),
             plot_insets: Some(crate::layout::Insets::default()),
+            ridge_overlap: 1.5,
         };
         resolve(marks, Size::new(400.0, 300.0), &cfg)
     }

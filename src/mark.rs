@@ -162,6 +162,9 @@ pub struct Annotation {
     /// `None` draws in the chart's label color. A heat map's cell text sets one per cell, because
     /// no single color reads on both ends of a ramp.
     pub color: Option<Color>,
+    /// Draw the text in a capsule that casts a shadow, so it reads over the marks it sits on:
+    /// the value at the end of a threshold rule, the name of a shaded window.
+    pub pill: bool,
 }
 
 /// Everything about a mark's appearance that is not its geometry. Named fields per the API style
@@ -189,6 +192,9 @@ pub struct MarkStyle {
     /// diameter so that a value twice as large reads as twice as much ink, which is the whole
     /// reason area is the right channel for magnitude.
     pub symbol_size: f64,
+    /// Fill with diagonal lines this many points apart instead of a solid color
+    /// ([`Mark::hatched`]). `None` fills solid.
+    pub hatch: Option<f64>,
 }
 
 impl Default for MarkStyle {
@@ -205,6 +211,7 @@ impl Default for MarkStyle {
             interpolation: Interpolation::Linear,
             symbol: None,
             symbol_size: 64.0,
+            hatch: None,
         }
     }
 }
@@ -220,6 +227,8 @@ pub struct Mark {
     pub x_end: Option<Value>,
     pub y: Option<Value>,
     pub y_end: Option<Value>,
+    /// How high the mark stands above its row of a categorical y axis ([`Mark::ridge`]).
+    pub rise: Option<Value>,
     /// The color channel, Swift Charts' `.foregroundStyle(by:)`. Also what the legend lists.
     pub series: Option<Value>,
     /// The dodging channel, Swift Charts' `.position(by:)`. Splits a band between its values so
@@ -260,6 +269,7 @@ impl Mark {
             x_end: None,
             y: None,
             y_end: None,
+            rise: None,
             series: None,
             dodge: None,
             symbol_by: None,
@@ -329,6 +339,22 @@ impl Mark {
         self
     }
 
+    /// Stand this area or line on its row of a categorical y axis, `height` high: a ridgeline.
+    ///
+    /// The mark's y names the row and `height` is the quantity drawn. Each row is its own
+    /// connected series, scaled so the tallest value in the chart spans
+    /// [`Chart::ridge_overlap`](crate::Chart::ridge_overlap) rows, and a ridge hides the rows
+    /// behind it, so the chart reads front to back like a range of hills.
+    ///
+    /// ```ignore
+    /// area(value("Hour", hour), value("Night", night)).ridge(value("Meteors", count))
+    /// ```
+    pub fn ridge(mut self, height: Value) -> Self {
+        self.rise = Some(height);
+        self.stacking = Stacking::Unstacked;
+        self
+    }
+
     // --- Style ---
 
     pub fn foreground(mut self, c: Color) -> Self {
@@ -356,6 +382,13 @@ impl Mark {
     /// legend; only the fill changes.
     pub fn gradient(mut self, top: Color, bottom: Color) -> Self {
         self.style.gradient = Some((top, bottom));
+        self
+    }
+    /// Fill a bar, a rectangle, a band or an area with diagonal lines `spacing` points apart, in
+    /// the mark's color, instead of a solid fill: a window that is marked rather than measured
+    /// (an outage, a forecast, a night the Moon was up).
+    pub fn hatched(mut self, spacing: f64) -> Self {
+        self.style.hatch = Some(spacing.max(2.0));
         self
     }
     pub fn line_cap(mut self, cap: LineCap) -> Self {
@@ -430,12 +463,32 @@ impl Mark {
         self
     }
     pub fn annotation(mut self, position: AnnotationPosition, text: impl Into<String>) -> Self {
-        let color = self.annotation.as_ref().and_then(|a| a.color);
+        let (color, pill) = self
+            .annotation
+            .as_ref()
+            .map_or((None, false), |a| (a.color, a.pill));
         self.annotation = Some(Annotation {
             text: text.into(),
             position,
             color,
+            pill,
         });
+        self
+    }
+    /// Draw this mark's annotation in a capsule with a soft shadow, so it reads over whatever
+    /// the chart draws under it.
+    pub fn annotation_pill(mut self) -> Self {
+        match &mut self.annotation {
+            Some(a) => a.pill = true,
+            None => {
+                self.annotation = Some(Annotation {
+                    text: String::new(),
+                    position: AnnotationPosition::Automatic,
+                    color: None,
+                    pill: true,
+                });
+            }
+        }
         self
     }
     /// Draw this mark's annotation in `color` instead of the chart's label color.
@@ -447,6 +500,7 @@ impl Mark {
                     text: String::new(),
                     position: AnnotationPosition::Automatic,
                     color: Some(color),
+                    pill: false,
                 });
             }
         }
@@ -519,6 +573,24 @@ pub fn rect(x: Value, y: Value) -> Mark {
     let mut m = Mark::new(MarkKind::Rectangle);
     m.x = Some(x);
     m.y = Some(y);
+    m
+}
+
+/// A band across the whole plot between two x values: a window of time, a range of a
+/// measurement. Style it like any rectangle; [`Mark::hatched`] marks it without hiding the data
+/// under it. It spans the y axis without sizing it.
+pub fn band_x(start: Value, end: Value) -> Mark {
+    let mut m = Mark::new(MarkKind::Rectangle);
+    m.x = Some(start);
+    m.x_end = Some(end);
+    m
+}
+
+/// A band across the whole plot between two y values: a target range, a tolerance.
+pub fn band_y(start: Value, end: Value) -> Mark {
+    let mut m = Mark::new(MarkKind::Rectangle);
+    m.y = Some(start);
+    m.y_end = Some(end);
     m
 }
 

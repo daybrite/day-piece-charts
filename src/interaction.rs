@@ -7,7 +7,7 @@ use crate::{
     select::{Guides, HitModel, Selection, Snap},
 };
 use day_reactive::Signal;
-use day_spec::{Color, DragPhase, Point, Rect};
+use day_spec::{Color, DragAxis, DragPhase, Point, Rect};
 use std::{collections::BTreeMap, rc::Rc};
 
 /// A data tuple independent of a chart's pixels, title or formatted axis labels.
@@ -440,6 +440,42 @@ impl From<PointBinding> for Interaction {
     }
 }
 
+/// The one axis a chart's drag bindings scrub along, when they agree on one (README "Drags
+/// inside a scroll view"). A chart inside a scroll view then takes only the drags that set off along it
+/// and leaves the others to scroll the page: a line chart's inspection scrubs sideways while a
+/// vertical swipe over it scrolls. A binding that moves in both axes (a nearest-mark
+/// inspection, a two-axis brush or viewport) takes every drag, and with it the whole chart's.
+pub(crate) fn drag_axis(bindings: &[Interaction]) -> Option<DragAxis> {
+    let snap_axis = |snap: Snap| match snap {
+        Snap::NearestX => Some(DragAxis::Horizontal),
+        Snap::NearestY => Some(DragAxis::Vertical),
+        Snap::NearestMark | Snap::Hit => None,
+    };
+    let interval_axis = |parameter: IntervalSelection| match parameter.axes {
+        Axes::X => Some(DragAxis::Horizontal),
+        Axes::Y => Some(DragAxis::Vertical),
+        Axes::XY => None,
+    };
+    let mut axis = None;
+    for binding in bindings {
+        let along = match binding {
+            Interaction::Inspect(inspect) => snap_axis(inspect.snap),
+            Interaction::Point(point) if point.trigger == EventSource::Hover => {
+                snap_axis(point.snap)
+            }
+            Interaction::Brush(brush) => interval_axis(brush.parameter),
+            Interaction::Viewport(viewport) => interval_axis(viewport.parameter),
+            Interaction::Point(_) | Interaction::Links(_) => continue,
+        };
+        match (along, axis) {
+            (None, _) => return None,
+            (Some(a), Some(b)) if a != b => return None,
+            (Some(a), _) => axis = Some(a),
+        }
+    }
+    axis
+}
+
 pub(crate) fn extent(scale: &Scale, a: f64, b: f64) -> Option<Extent> {
     if scale.kind.is_discrete() {
         Some(Extent::Categories(
@@ -861,5 +897,36 @@ mod tests {
         )
         .unwrap();
         assert_eq!(selected.x, Some(Extent::Continuous(10.0, 100.0)));
+    }
+
+    /// A scrub along one axis claims only the drags along it, so a chart in a scroll view lets
+    /// the cross-axis swipe scroll; bindings that move in both axes, or disagree, claim all.
+    #[test]
+    fn drag_axis_follows_the_bindings() {
+        let inspect = |snap| Interaction::from(Inspect::new(Signal::new(None)).snap(snap));
+        let brush = |axes| Interaction::from(IntervalSelection::new().axes(axes).brush());
+        assert_eq!(
+            drag_axis(&[inspect(Snap::NearestX)]),
+            Some(DragAxis::Horizontal)
+        );
+        assert_eq!(
+            drag_axis(&[inspect(Snap::NearestY)]),
+            Some(DragAxis::Vertical)
+        );
+        assert_eq!(drag_axis(&[inspect(Snap::NearestMark)]), None);
+        assert_eq!(
+            drag_axis(&[inspect(Snap::NearestX), brush(Axes::X)]),
+            Some(DragAxis::Horizontal)
+        );
+        assert_eq!(drag_axis(&[inspect(Snap::NearestX), brush(Axes::Y)]), None);
+        assert_eq!(drag_axis(&[brush(Axes::XY)]), None);
+        // A click-triggered point binding takes no drag, so it leaves the axis alone.
+        assert_eq!(
+            drag_axis(&[
+                Interaction::from(PointSelection::new().on(EventSource::Click)),
+                inspect(Snap::NearestX),
+            ]),
+            Some(DragAxis::Horizontal)
+        );
     }
 }

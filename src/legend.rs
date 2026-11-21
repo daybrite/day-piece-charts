@@ -108,15 +108,15 @@ impl Piece for Legend {
                                                 .unwrap_or_else(|| Record::series(e.key.clone()))
                                         }))
                                 }) {
-                                    slot.field(|e| e.color)
+                                    slot.field(|e| e.color).into()
                                 } else {
-                                    crate::Chrome::for_dark(day_core::dark_mode()).label
+                                    crate::Chrome::default().label
                                 }
                             }),
                         label(move || slot.field(|e| e.detail.clone().unwrap_or_default()))
                             .font(Font::Caption2)
                             .single_line()
-                            .color(move || crate::Chrome::for_dark(day_core::dark_mode()).label),
+                            .color(crate::Chrome::default().label),
                     ))
                     .spacing(5.0)
                     .align(VAlign::Center)
@@ -169,7 +169,7 @@ impl Piece for Legend {
                                                 .clone()
                                                 .unwrap_or_else(|| Record::series(e.key.clone()))
                                         })),
-                                        day_core::modifiers().shift,
+                                        day_core::modifiers().shift(),
                                     );
                                 }
                                 if let Some(target) = slot.field(|e| e.link.clone()) {
@@ -197,7 +197,7 @@ impl Piece for Legend {
                                             .clone()
                                             .unwrap_or_else(|| Record::series(e.key.clone()))
                                     })),
-                                    day_core::modifiers().shift,
+                                    day_core::modifiers().shift(),
                                 );
                             }
                         })

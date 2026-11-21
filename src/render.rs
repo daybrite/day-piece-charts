@@ -8,12 +8,12 @@
 //! out as a wedge because that is what a bar is in polar space; the renderer does not special-case
 //! it, and nothing here knows the words "pie chart".
 
-use day_geometry::Affine;
+use day_geometry::{Affine, Angle};
 use day_pieces::{Draw, PathBuilder, TextStyle};
 use day_spec::props::TextAlign;
 use day_spec::{
-    Color, CornerRadii, FillRule, LinearGradient, Paint, Point, Rect, Shape, StrokeStyle,
-    TextAnchor, TextVAlign,
+    BlendMode, Color, CornerRadii, FillRule, Ink, LinearGradient, Paint, Point, Rect, Shadow,
+    Shape, StrokeStyle, TextAnchor, TextVAlign,
 };
 
 use crate::axis::{AxisPosition, AxisSpec};
@@ -31,6 +31,11 @@ pub struct Paint2<'a> {
     pub x_axis: &'a AxisSpec,
     pub y_axis: &'a AxisSpec,
     pub series_colors: &'a dyn Fn(usize, &str) -> Color,
+    /// What a ridge hides the rows behind it with ([`Mark::ridge`](crate::Mark::ridge)). `None`
+    /// erases them, so the chart sits on whatever is behind its canvas; a drawing with a ground
+    /// of its own (an export's white sheet, a plot background) names it, because erasing would
+    /// cut through that too.
+    pub ground: Option<Ink>,
 }
 
 /// Normalized position of a device x within the plot.
@@ -131,12 +136,12 @@ fn fill_paint(p: &Placed, color: Color) -> Paint {
     }
 }
 
-/// `c` drawn at `alpha` of its own opacity: a tick's.
-fn faded(c: Color, alpha: f64) -> Color {
+/// `ink` drawn at `alpha` of its own opacity: a tick's.
+fn faded(ink: Ink, alpha: f64) -> Ink {
     if alpha >= 1.0 {
-        c
+        ink
     } else {
-        c.with_alpha(c.a * alpha.max(0.0))
+        ink.map(|c| c.with_alpha(c.a * alpha.max(0.0)))
     }
 }
 
@@ -174,7 +179,8 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     let mut connected: Vec<(MarkKind, usize)> = Vec::new();
     for i in &order {
         let p = &r.marks[*i];
-        if matches!(p.mark.kind, MarkKind::Line | MarkKind::Area) {
+        // A ridge is connected along its own row, and drawn by `ridges`.
+        if matches!(p.mark.kind, MarkKind::Line | MarkKind::Area) && p.mark.rise.is_none() {
             let key = (p.mark.kind, p.series_index);
             if !connected.contains(&key) {
                 connected.push(key);
@@ -201,6 +207,22 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
         d.save();
         d.clip(Shape::Rect(Rect::new(cx, cy, cw, chh)));
     }
+    // A sweeping entrance uncovers the marks from the leading edge. The clip reaches a little
+    // past the plot on both sides, so a point on the first or last sample is not cut in half.
+    let revealing = r.reveal < 1.0;
+    if revealing {
+        let (far, overhang) = (1.0e5, 8.0);
+        d.save();
+        d.clip(Shape::Rect(Rect::new(
+            r.plot.origin.x - overhang,
+            r.plot.origin.y - far,
+            (r.plot.size.width + 2.0 * overhang) * r.reveal.max(0.0),
+            r.plot.size.height + 2.0 * far,
+        )));
+    }
+    // Ridges before everything else: each one hides what is behind it, and a rule or a band
+    // drawn over the range should stay on top.
+    ridges(d, r, paint);
     // Areas first so lines and points read on top of them.
     for (kind, si) in connected.iter().filter(|(k, _)| *k == MarkKind::Area) {
         connected_path(d, r, paint, *kind, *si);
@@ -240,6 +262,9 @@ pub fn draw(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     }
     for (look, at) in groups {
         draw_symbols(d, look.symbol, &at, look.radius, look.color, look.width);
+    }
+    if revealing {
+        d.restore();
     }
     if clip {
         d.restore();
@@ -328,7 +353,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
     // descent and nothing. The cap middle sits `ascent - cap/2` below the line box top, and the
     // line middle at `height/2`; the gap between them is the correction.
     let cap_lift = m.height / 2.0 - (m.ascent - m.cap_height / 2.0);
-    let label = |color: Color, anchor: TextAnchor| TextStyle {
+    let label = |color: Ink, anchor: TextAnchor| TextStyle {
         size: paint.label_size,
         color,
         anchor,
@@ -479,7 +504,7 @@ fn axes(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
             let cx = x + (widest(&r.y_ticks, paint) + 14.0 + line_h / 2.0) * away;
             let cy = plot.origin.y + plot.size.height / 2.0;
             d.transformed(
-                Affine::rotate(-std::f64::consts::FRAC_PI_2).then(Affine::translate(cx, cy)),
+                Affine::rotate(-Angle::QUARTER).then(Affine::translate(cx, cy)),
                 |d| {
                     d.text(
                         title,
@@ -531,14 +556,17 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         sector(d, r, paint, p);
         return;
     }
-    let Some(cx) = center_x(p, r) else { return };
+    let plot = r.plot;
     // Which edges are rounded, as (top, bottom, left, right). Only the end a bar grew to is
     // rounded: the edge standing on the axis, and the edge a stacked segment shares with the one
     // below it, stay square, so a bar reads as rising from its baseline and a stack as one bar.
     // A range with no baseline (a candle's body, a Gantt bar) rounds both of its ends, and a
     // heat-map cell all four corners.
     let mut round = (true, true, true, true);
-    let (top, bottom) = if r.y.kind.is_discrete() {
+    let (top, bottom) = if p.mark.y.is_none() {
+        // A band between two x values spans the plot.
+        (plot.origin.y, plot.origin.y + plot.size.height)
+    } else if r.y.kind.is_discrete() {
         // A categorical y (a heat map's rows, a horizontal bar's category): the mark is centered
         // on its band, as tall as the band less the mark's height dimension.
         let Some((cy, h)) = p.y_band else { return };
@@ -588,7 +616,11 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
             }
             _ => return,
         }
+    } else if p.mark.x.is_none() {
+        // A band between two y values spans the plot.
+        (plot.origin.x, plot.origin.x + plot.size.width)
     } else {
+        let Some(cx) = center_x(p, r) else { return };
         let w = band_of(p, r);
         (cx - w / 2.0, cx + w / 2.0)
     };
@@ -598,7 +630,7 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         (right - left).max(0.0),
         (bottom - top).max(0.0),
     );
-    let paint = fill_paint(p, color_of(p, r, paint));
+    let color = color_of(p, r, paint);
     let radius = p.mark.style.corner_radius;
     // A corner is rounded when both edges meeting at it are.
     let (t, b, l, rt) = round;
@@ -611,7 +643,42 @@ fn bar_or_rect(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     };
     // Fitted by `rounded_rect`: a radius wider than the bar degrades to a rounded end rather than
     // inverting the shape.
-    d.fill(Shape::rounded_rect(rect, radii), paint);
+    fill_mark(d, Shape::rounded_rect(rect, radii), rect, p, color);
+}
+
+/// Fill `shape` the way the mark says: hatched, with its gradient, or solid in `color`.
+/// `bounds` is the shape's bounding box, which a hatch has to cover.
+fn fill_mark(d: &mut Draw, shape: Shape, bounds: Rect, p: &Placed, color: Color) {
+    match p.mark.style.hatch {
+        Some(spacing) => d.clipped(shape, |d| hatch(d, bounds, spacing, color)),
+        None => d.fill(shape, fill_paint(p, color)),
+    }
+}
+
+/// Diagonal lines `spacing` points apart across `bounds`, rising to the right, as one path.
+///
+/// The lines sit on a lattice fixed to the canvas, not to `bounds`: two hatched marks side by
+/// side continue each other's lines, and a mark that moves or grows in a transition uncovers
+/// lines that stay where they are.
+fn hatch(d: &mut Draw, bounds: Rect, spacing: f64, color: Color) {
+    let (left, top) = (bounds.origin.x, bounds.origin.y);
+    let (right, bottom) = (left + bounds.size.width, top + bounds.size.height);
+    // A line is the points where `x + y` is one constant; neighbors differ by the spacing
+    // measured along an axis.
+    let step = spacing.max(2.0) * std::f64::consts::SQRT_2;
+    let mut c = ((left + top) / step).floor() * step;
+    let mut path = PathBuilder::new();
+    let mut any = false;
+    while c <= right + bottom {
+        path = path
+            .move_to(Point::new(c - bottom, bottom))
+            .line_to(Point::new(c - top, top));
+        any = true;
+        c += step;
+    }
+    if any {
+        d.stroke(path.build(), color, 1.0);
+    }
 }
 
 fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
@@ -636,7 +703,7 @@ fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         };
         d.stroke_styled(
             Shape::Line(Point::new(x, y0), Point::new(x, y1)),
-            Paint::Solid(color),
+            color,
             style,
         );
     } else if let Some(v) = &p.mark.y {
@@ -653,7 +720,7 @@ fn rule(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
         };
         d.stroke_styled(
             Shape::Line(Point::new(x0, y), Point::new(x1, y)),
-            Paint::Solid(color),
+            color,
             style,
         );
     }
@@ -721,7 +788,7 @@ fn connected_path(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, kind: MarkKind
         .collect();
     if kind == MarkKind::Line {
         let path = curve(&top, interp, polar);
-        d.stroke_styled(path, Paint::Solid(color), stroke_style(proto));
+        d.stroke_styled(path, color, stroke_style(proto));
         return;
     }
     // Area: the top edge, then back along the baseline.
@@ -734,11 +801,109 @@ fn connected_path(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, kind: MarkKind
     b = append(b, &top, interp, true);
     b = append(b, &base, interp, false);
     let shape = b.close().build();
+    fill_area(d, shape, proto, color);
+}
+
+/// Fill an area's shape: hatched, with its gradient, or in its color a little short of opaque,
+/// so a gridline behind it still reads.
+fn fill_area(d: &mut Draw, shape: Shape, proto: &Placed, color: Color) {
+    if let Some(spacing) = proto.mark.style.hatch {
+        let bounds = shape.bounds();
+        d.clipped(shape, |d| hatch(d, bounds, spacing, color));
+        return;
+    }
     let paint = match proto.mark.style.gradient {
         Some(_) => fill_paint(proto, color),
         None => color.with_alpha(color.a * 0.85).into(),
     };
     d.fill(shape, paint);
+}
+
+/// Where a ridge mark's value sits, in device points: its row's center line less its height.
+fn ridge_y(p: &Placed, r: &Resolved) -> Option<f64> {
+    p.mark.rise.as_ref()?;
+    Some(p.y_band?.0 - p.v1 * r.ridge_unit)
+}
+
+/// Draw the ridges ([`Mark::ridge`](crate::Mark::ridge)): row by row from the back, each row's
+/// areas and then its lines, every area first hiding what is behind it.
+fn ridges(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>) {
+    if r.ridge_unit <= 0.0 {
+        return;
+    }
+    let row_of = |p: &Placed| crate::resolve::key_of(&p.mark.y);
+    let mut rows: Vec<(f64, String)> = Vec::new();
+    for p in r.marks.iter().filter(|p| p.mark.rise.is_some()) {
+        if let Some((base, _)) = p.y_band {
+            let row = row_of(p);
+            if !rows.iter().any(|(_, seen)| *seen == row) {
+                rows.push((base, row));
+            }
+        }
+    }
+    rows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    for (base, row) in &rows {
+        for kind in [MarkKind::Area, MarkKind::Line] {
+            let members = |si: usize| {
+                r.marks.iter().filter(move |p| {
+                    p.mark.kind == kind
+                        && p.mark.rise.is_some()
+                        && p.series_index == si
+                        && row_of(p) == *row
+                })
+            };
+            let mut series: Vec<usize> = Vec::new();
+            for p in &r.marks {
+                if p.mark.kind == kind
+                    && p.mark.rise.is_some()
+                    && row_of(p) == *row
+                    && !series.contains(&p.series_index)
+                {
+                    series.push(p.series_index);
+                }
+            }
+            for si in series {
+                let Some(proto) = members(si).next() else {
+                    continue;
+                };
+                let mut top: Vec<Point> = members(si)
+                    .filter_map(|p| {
+                        let x = center_x(p, r)? + p.mark.offset.0;
+                        let y = ridge_y(p, r)? + p.mark.offset.1;
+                        (x.is_finite() && y.is_finite()).then_some(Point::new(x, y))
+                    })
+                    .collect();
+                top.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
+                let (Some(first), Some(last)) = (top.first().copied(), top.last().copied()) else {
+                    continue;
+                };
+                if top.len() < 2 {
+                    continue;
+                }
+                let color = color_of(proto, r, paint);
+                let interp = proto.mark.style.interpolation;
+                if kind == MarkKind::Line {
+                    d.stroke_styled(curve(&top, interp, false), color, stroke_style(proto));
+                    continue;
+                }
+                let shape = append(
+                    PathBuilder::new().rule(FillRule::NonZero),
+                    &top,
+                    interp,
+                    true,
+                )
+                .line_to(Point::new(last.x, *base))
+                .line_to(Point::new(first.x, *base))
+                .close()
+                .build();
+                match paint.ground {
+                    Some(ground) => d.fill(shape.clone(), ground),
+                    None => d.blended(BlendMode::Erase, |d| d.fill(shape.clone(), Color::BLACK)),
+                }
+                fill_area(d, shape, proto, color);
+            }
+        }
+    }
 }
 
 fn device(r: &Resolved, x: f64, y: f64, polar: bool) -> Point {
@@ -928,7 +1093,11 @@ impl PointLook {
 /// Where one point mark goes and what it looks like, or `None` if it does not project.
 fn point_mark(r: &Resolved, paint: &Paint2<'_>, p: &Placed) -> Option<(PointLook, Point)> {
     let x = center_x(p, r)?;
-    let y = r.y.project(&Datum::Number(p.v1))?;
+    // On a categorical y (a dot plot, a dumbbell's ends) the point sits on its row.
+    let y = match p.y_band {
+        Some((center, _)) => center,
+        None => r.y.project(&Datum::Number(p.v1))?,
+    };
     let at = device(
         r,
         x + p.mark.offset.0,
@@ -1036,14 +1205,14 @@ fn draw_symbols(d: &mut Draw, sym: Symbol, at: &[Point], r: f64, color: Color, w
 /// the corner radius all compose: an arc op would draw the outer edge and leave the join to the
 /// rasterizer's own arc-to-line rule, which differs between backends.
 fn wedge(center: Point, r0: f64, r1: f64, outer: (f64, f64), inner: (f64, f64)) -> Shape {
-    // Out along the far edge, back along the near one: one closed contour. `PathBuilder::arc_to`
-    // takes degrees (docs/canvas.md "Paths"); the geometry here is in radians. A zero inner radius
-    // and a zero-width inner span both collapse to a single point, which `arc_to` reaches with a
-    // plain line: a pie's apex, or the blunt tip an inset wedge ends in.
-    let deg = f64::to_degrees;
+    // Out along the far edge, back along the near one: one closed contour. The geometry here is
+    // in radians. A zero inner radius and a zero-width inner span both collapse to a single
+    // point, which `arc_to` reaches with a plain line: a pie's apex, or the blunt tip an inset
+    // wedge ends in.
+    let rad = Angle::rad;
     PathBuilder::new()
-        .arc_to(center, r1, deg(outer.0), deg(outer.1 - outer.0))
-        .arc_to(center, r0, deg(inner.1), deg(inner.0 - inner.1))
+        .arc_to(center, r1, rad(outer.0), rad(outer.1 - outer.0))
+        .arc_to(center, r0, rad(inner.1), rad(inner.0 - inner.1))
         .close()
         .build()
 }
@@ -1160,59 +1329,184 @@ fn annotation(d: &mut Draw, r: &Resolved, paint: &Paint2<'_>, p: &Placed) {
     if a.text.is_empty() {
         return;
     }
-    let Some(x) = center_x(p, r) else { return };
-    // On a categorical y the mark IS the band, so the annotation keys off the category, not the
-    // stacked value it does not have.
-    let y = if r.y.kind.is_discrete() {
-        p.y_band.map(|(y, _)| y)
-    } else {
-        r.y.project(&Datum::Number(p.v1))
-    };
-    let Some(y) = y else { return };
     // A mark's opacity is the whole mark's, its label included: a bar fading out of a
-    // transition takes its value with it.
-    let opacity = p.mark.style.opacity.clamp(0.0, 1.0);
+    // transition takes its value with it. A hatched band is the exception, because its
+    // opacity thins the hatching and the name over it still has to read.
+    let opacity = if p.mark.style.hatch.is_some() {
+        1.0
+    } else {
+        p.mark.style.opacity.clamp(0.0, 1.0)
+    };
     if opacity <= 0.01 {
         return;
     }
     let line = day_core::measure_text(&a.text, paint.label_size, &paint.font);
-    // Text laid over a bar or a cell has to fit inside it: a heat map's numbers on a phone-width
-    // grid would otherwise spill into their neighbours and read as one smear. Not drawing a
-    // label is the right answer there; the color still carries the value.
-    if a.position == AP::Overlay && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
-        let width = match (&p.mark.x, &p.mark.x_end) {
-            (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
-                (Some(a), Some(b)) => (a - b).abs(),
-                _ => band_of(p, r),
-            },
-            _ => band_of(p, r),
-        };
-        if line.width > width - 2.0 {
+    // A pill is wider and taller than its text by its padding, and stands that much further
+    // off the mark.
+    let (pad_x, pad_y) = if a.pill { (7.0, 2.5) } else { (0.0, 0.0) };
+    let (w, h) = (line.width + 2.0 * pad_x, line.height + 2.0 * pad_y);
+    let spanning = p.mark.kind == MarkKind::Rule
+        || p.mark.kind == MarkKind::Rectangle && (p.mark.x.is_none() || p.mark.y.is_none());
+    let at = if spanning {
+        let Some(at) = span_annotation(r, p, a.position, (w, h)) else {
             return;
+        };
+        at
+    } else {
+        let Some(x) = center_x(p, r) else { return };
+        // On a categorical y the mark IS the band, so the annotation keys off the category, not
+        // the stacked value it does not have.
+        let y = if r.y.kind.is_discrete() {
+            ridge_y(p, r).or(p.y_band.map(|(y, _)| y))
+        } else {
+            r.y.project(&Datum::Number(p.v1))
+        };
+        let Some(y) = y else { return };
+        // Text laid over a bar or a cell has to fit inside it: a heat map's numbers on a
+        // phone-width grid would otherwise spill into their neighbours and read as one smear.
+        // Not drawing a label is the right answer there; the color still carries the value.
+        if a.position == AP::Overlay && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
+            let width = match (&p.mark.x, &p.mark.x_end) {
+                (Some(a), Some(b)) => match (r.x.project(&a.datum), r.x.project(&b.datum)) {
+                    (Some(a), Some(b)) => (a - b).abs(),
+                    _ => band_of(p, r),
+                },
+                _ => band_of(p, r),
+            };
+            if w > width - 2.0 {
+                return;
+            }
         }
-    }
-    let at = match a.position {
-        // The automatic position puts the label clear of the mark on the side the value grew
-        // toward, which is above for a positive bar and below for a negative one.
-        AP::Automatic | AP::Top => Point::new(x, y - line.height * 0.7),
-        AP::Bottom => Point::new(x, y + line.height * 0.7),
-        AP::Leading => Point::new(x - line.width / 2.0 - 6.0, y),
-        AP::Trailing => Point::new(x + line.width / 2.0 + 6.0, y),
-        AP::Overlay => Point::new(x, y),
+        // A point's label clears its symbol, however large that is drawn.
+        let reach = if p.mark.kind == MarkKind::Point {
+            (p.mark.style.symbol_size / std::f64::consts::PI).sqrt()
+        } else {
+            0.0
+        };
+        match a.position {
+            // The automatic position puts the label clear of the mark on the side the value
+            // grew toward, which is above for a positive bar and below for a negative one.
+            AP::Automatic | AP::Top => Point::new(x, y - line.height * 0.7 - pad_y - reach),
+            AP::Bottom => Point::new(x, y + line.height * 0.7 + pad_y + reach),
+            AP::Leading => Point::new(x - w / 2.0 - 6.0 - reach, y),
+            AP::Trailing => Point::new(x + w / 2.0 + 6.0 + reach, y),
+            AP::Overlay => Point::new(x, y),
+        }
     };
+    let color = a.color.map_or(
+        if a.pill {
+            paint.chrome.title
+        } else {
+            paint.chrome.label
+        },
+        Ink::from,
+    );
+    if a.pill {
+        let capsule = Shape::RoundedRect(Rect::new(at.x - w / 2.0, at.y - h / 2.0, w, h), h / 2.0);
+        let surface = paint.chrome.surface;
+        d.shadowed(
+            Shadow::new(faded(paint.chrome.shadow, opacity), 5.0).offset(0.0, 1.5),
+            |d| d.fill(capsule, faded(surface, opacity)),
+        );
+    }
     d.text(
         &a.text,
         at,
         TextStyle {
             size: paint.label_size,
-            color: {
-                let c = a.color.unwrap_or(paint.chrome.label);
-                c.with_alpha(c.a * opacity)
-            },
+            color: faded(color, opacity),
             anchor: TextAnchor::CENTERED,
             font: paint.font.clone(),
         },
     );
+}
+
+/// Where the annotation of a mark that spans the plot goes: a rule, or a band between two
+/// values. `size` is the label's, and the answer is its center.
+///
+/// A horizontal rule carries its label at an end (`Leading`, `Trailing`), sitting on the line
+/// just inside the plot, or over or under its middle. A vertical rule or a band between two x
+/// values carries it at the top or the bottom, inside the plot, or beside itself.
+fn span_annotation(
+    r: &Resolved,
+    p: &Placed,
+    position: crate::mark::AnnotationPosition,
+    (w, h): (f64, f64),
+) -> Option<Point> {
+    use crate::mark::AnnotationPosition as AP;
+    let plot = r.plot;
+    let (left, right) = (plot.origin.x, plot.origin.x + plot.size.width);
+    let (top, bottom) = (plot.origin.y, plot.origin.y + plot.size.height);
+    let project = |scale: &crate::scale::Scale, v: &Option<crate::data::Value>, or: f64| {
+        v.as_ref()
+            .and_then(|v| scale.project(&v.datum))
+            .unwrap_or(or)
+    };
+    // The extent the mark covers along each axis: a rule's is a line, a band's a strip.
+    let vertical = p.mark.x.is_some() && (p.mark.kind != MarkKind::Rule || p.mark.x_end.is_none());
+    let (x0, x1, y0, y1) = if vertical && p.mark.kind == MarkKind::Rule {
+        let x = project(&r.x, &p.mark.x, f64::NAN);
+        let (a, b) = match (&p.mark.y, &p.mark.y_end) {
+            (Some(_), Some(_)) => (
+                project(&r.y, &p.mark.y, top),
+                project(&r.y, &p.mark.y_end, bottom),
+            ),
+            _ => (top, bottom),
+        };
+        (x, x, a.min(b), a.max(b))
+    } else if p.mark.kind == MarkKind::Rule {
+        let y = project(&r.y, &p.mark.y, f64::NAN);
+        let (a, b) = match (&p.mark.x, &p.mark.x_end) {
+            (Some(_), Some(_)) => (
+                project(&r.x, &p.mark.x, left),
+                project(&r.x, &p.mark.x_end, right),
+            ),
+            _ => (left, right),
+        };
+        (a.min(b), a.max(b), y, y)
+    } else if p.mark.y.is_none() {
+        let (a, b) = (
+            project(&r.x, &p.mark.x, left),
+            project(&r.x, &p.mark.x_end, right),
+        );
+        (a.min(b), a.max(b), top, bottom)
+    } else {
+        let (a, b) = (
+            project(&r.y, &p.mark.y, top),
+            project(&r.y, &p.mark.y_end, bottom),
+        );
+        (left, right, a.min(b), a.max(b))
+    };
+    if !(x0.is_finite() && x1.is_finite() && y0.is_finite() && y1.is_finite()) {
+        return None;
+    }
+    let (mid_x, mid_y) = (f64::midpoint(x0, x1), f64::midpoint(y0, y1));
+    let (gap, edge) = (4.0, 3.0);
+    let at = if p.mark.kind == MarkKind::Rule && !vertical {
+        // A horizontal rule.
+        match position {
+            AP::Trailing => Point::new(x1 - w / 2.0 - edge, mid_y),
+            AP::Leading => Point::new(x0 + w / 2.0 + edge, mid_y),
+            AP::Automatic | AP::Top => Point::new(mid_x, mid_y - h / 2.0 - gap),
+            AP::Bottom => Point::new(mid_x, mid_y + h / 2.0 + gap),
+            AP::Overlay => Point::new(mid_x, mid_y),
+        }
+    } else {
+        // A vertical rule, or a band: `x0..x1` is zero wide for the rule.
+        match position {
+            AP::Automatic | AP::Top => Point::new(mid_x, y0 + h / 2.0 + edge),
+            AP::Bottom => Point::new(mid_x, y1 - h / 2.0 - edge),
+            AP::Leading => Point::new(x0 - w / 2.0 - gap, y0 + h / 2.0 + edge),
+            AP::Trailing => Point::new(x1 + w / 2.0 + gap, y0 + h / 2.0 + edge),
+            AP::Overlay => Point::new(mid_x, mid_y),
+        }
+    };
+    // Kept on the plot sideways, so a label at the first or last sample is whole.
+    let half = w / 2.0;
+    Some(Point::new(
+        at.x.clamp(left + half, (right - half).max(left + half)),
+        at.y,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1234,6 +1528,19 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
         _ => 0.0,
     };
     let (x_step, y_step) = (step_of(&r.x_ticks), step_of(&r.y_ticks));
+    // A ridge has no axis to borrow a precision from, so its values read to three figures of
+    // the tallest one.
+    let tallest_ridge = r
+        .marks
+        .iter()
+        .filter(|p| p.mark.rise.is_some())
+        .map(|p| p.v1.abs())
+        .fold(0.0_f64, f64::max);
+    let ridge_step = if tallest_ridge > 0.0 {
+        10f64.powf(tallest_ridge.log10().floor() - 2.0)
+    } else {
+        0.0
+    };
     let marks = r
         .marks
         .iter()
@@ -1297,18 +1604,32 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                     value: number,
                 });
             }
-            let horizontal = p.y_band.is_some() && p.mark.x_end.is_some();
+            // A band across the plot marks a range of an axis; it is not a datum to select.
+            if p.mark.kind == MarkKind::Rectangle && (p.mark.x.is_none() || p.mark.y.is_none()) {
+                return None;
+            }
+            let ridge = ridge_y(p, r);
+            let horizontal = p.y_band.is_some() && p.mark.x_end.is_some() && ridge.is_none();
             let x = if horizontal {
                 r.x.project(&p.mark.x_end.as_ref()?.datum)?
             } else {
                 center_x(p, r)?
             };
-            let y = if let Some((center, _)) = p.y_band {
+            let y = if let Some(y) = ridge {
+                y
+            } else if let Some((center, _)) = p.y_band {
                 center
             } else {
                 r.y.project(&Datum::Number(p.v1))?
             };
-            let (position, label, measured) = if horizontal {
+            let (position, label, measured) = if ridge.is_some() {
+                // A ridge's value is its height; the y scale is its rows.
+                (
+                    x_label_of(p, r, paint, x_step),
+                    crate::ticks::format_value(p.v1, ridge_step),
+                    p.v1,
+                )
+            } else if horizontal {
                 (
                     p.mark
                         .y
@@ -1333,7 +1654,14 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
                     p.v1,
                 )
             };
-            let series = r.series.get(p.series_index).cloned().unwrap_or_default();
+            let mut series = r.series.get(p.series_index).cloned().unwrap_or_default();
+            if ridge.is_some()
+                && series.is_empty()
+                && let Some(row) = p.mark.y.as_ref().and_then(|v| v.datum.as_category())
+            {
+                // With no color channel a ridge is named by its row.
+                series = row.to_string();
+            }
             let at = device(r, x + p.mark.offset.0, y + p.mark.offset.1, polar);
             let region = if !polar && matches!(p.mark.kind, MarkKind::Bar | MarkKind::Rectangle) {
                 let (left, right) = if let Some(end) = &p.mark.x_end {
@@ -1401,10 +1729,15 @@ pub fn hit_model(r: &Resolved, paint: &Paint2<'_>) -> crate::select::HitModel {
 /// formatter otherwise, so the guide's label reads exactly like the axis under it.
 fn x_label_of(p: &Placed, r: &Resolved, paint: &Paint2<'_>, step: f64) -> String {
     match p.mark.x.as_ref().map(|v| &v.datum) {
-        Some(Datum::Category(c)) => match &paint.x_axis.format {
-            Some(f) => f(&Datum::Category(c.clone())),
-            None => c.clone(),
-        },
+        // A category the axis's formatter left blank (an axis that numbers every fourth week)
+        // is still named when it is selected.
+        Some(Datum::Category(c)) => paint
+            .x_axis
+            .format
+            .as_ref()
+            .map(|f| f(&Datum::Category(c.clone())))
+            .filter(|label| !label.is_empty())
+            .unwrap_or_else(|| c.clone()),
         Some(Datum::Number(v) | Datum::Time(v)) => {
             crate::resolve::label_for(*v, &r.x, paint.x_axis, step)
         }
@@ -1458,14 +1791,19 @@ pub fn draw_guides(
     }
     // The box: the position on the first line, then one line per selected series.
     let size = paint.label_size;
-    let mut lines: Vec<(String, Color)> = vec![(sel.x_label.clone(), paint.chrome.title)];
+    // A position with no label of its own (an axis formatted to number only some of its
+    // categories) takes no line.
+    let mut lines: Vec<(String, Ink)> = Vec::new();
+    if !sel.x_label.is_empty() {
+        lines.push((sel.x_label.clone(), paint.chrome.title));
+    }
     for v in &sel.values {
         let text = if v.series.is_empty() {
             v.label.clone()
         } else {
             format!("{}  {}", v.series, v.label)
         };
-        lines.push((text, v.color));
+        lines.push((text, v.color.into()));
     }
     let line_h = day_core::measure_text("0", size, &paint.font).height;
     let w = lines
@@ -1488,25 +1826,14 @@ pub fn draw_guides(
         plot.origin.y,
         (plot.origin.y + plot.size.height - bh).max(plot.origin.y),
     );
-    d.fill(
-        Shape::RoundedRect(Rect::new(bx, by, bw, bh), 5.0),
-        // The plot's own ground where it has one, so the box reads as part of the chart; the
-        // page's otherwise, which is what a chart with a transparent plot sits on.
-        paint
-            .chrome
-            .plot_background
-            .unwrap_or(if day_core::dark_mode() {
-                Color::rgba(0.11, 0.11, 0.13, 1.0)
-            } else {
-                Color::rgba(1.0, 1.0, 1.0, 1.0)
-            })
-            .with_alpha(0.94),
+    // A raised box: the chrome's surface with a soft shadow under it and a hairline around it,
+    // so it separates from the marks it covers on a light ground and on a dark one.
+    let frame = Shape::RoundedRect(Rect::new(bx, by, bw, bh), 6.0);
+    d.shadowed(
+        Shadow::new(paint.chrome.shadow, 10.0).offset(0.0, 3.0),
+        |d| d.fill(frame.clone(), paint.chrome.surface),
     );
-    d.stroke(
-        Shape::RoundedRect(Rect::new(bx, by, bw, bh), 5.0),
-        rule,
-        1.0,
-    );
+    d.stroke(frame, paint.chrome.grid_line, 1.0);
     for (i, (text, color)) in lines.iter().enumerate() {
         d.text(
             text,
@@ -1659,6 +1986,7 @@ mod corner_tests {
             font: day_spec::CanvasFont::default(),
             legend_insets: crate::layout::Insets::default(),
             plot_insets: Some(crate::layout::Insets::default()),
+            ridge_overlap: 1.5,
         };
         let resolved = resolve(marks, Size::new(400.0, 300.0), &cfg);
         let chrome = Chrome::for_dark(false);
@@ -1669,13 +1997,14 @@ mod corner_tests {
             x_axis: &xa,
             y_axis: &ya,
             series_colors: &colors,
+            ground: None,
         };
         let mut d = Draw::new();
         draw(&mut d, &resolved, &paint);
         d.ops()
             .iter()
             .filter_map(|op| match op {
-                DrawOp::Fill(shape, Paint::Solid(c)) if *c == color => Some(shape.clone()),
+                DrawOp::Fill(shape, Paint::Solid(c)) if *c == color.into() => Some(shape.clone()),
                 _ => None,
             })
             .collect()

@@ -72,3 +72,42 @@ fn charts_built_inside_exports_register_and_record_a_still() {
     assert_eq!(exports.len(), 0, "the removed charts unregistered");
     assert!(exports.drawing().is_none());
 }
+
+#[test]
+fn an_exported_ridgeline_paints_its_sheet_and_erases_nothing() {
+    // On screen a ridge erases the rows behind it, so the chart sits on any ground. A still is
+    // drawn on its own white sheet, which erasing would cut through, so there it paints white.
+    let exports = ChartExports::new();
+    let around = exports.clone();
+    let _probe = boot(move || {
+        around
+            .around(|| {
+                chart(|| {
+                    let mut marks = Vec::new();
+                    for row in ["O", "G"] {
+                        for (i, flux) in [0.2, 1.0, 0.4].iter().enumerate() {
+                            marks.push(
+                                ch::area(value("Wavelength", i as f64), value("Class", row))
+                                    .ridge(value("Flux", *flux)),
+                            );
+                        }
+                    }
+                    marks
+                })
+                .frame(300.0, 200.0)
+            })
+            .any()
+    });
+    flush_sync();
+    let drawings = exports.drawings();
+    assert_eq!(drawings.len(), 1);
+    let ops = drawings[0].ops();
+    assert!(!ops.iter().any(|op| matches!(op, DrawOp::Blend(_))));
+    let white = ops
+        .iter()
+        .filter(|op| {
+            matches!(op, DrawOp::Fill(_, day_spec::Paint::Solid(c)) if *c == day_spec::Color::WHITE.into())
+        })
+        .count();
+    assert_eq!(white, 3, "the sheet, then one ground per ridge");
+}

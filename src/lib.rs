@@ -16,8 +16,8 @@
 //! | stage | here |
 //! |---|---|
 //! | variables | [`value`] / [`time`] bind a column to a channel |
-//! | marks | [`bar`], [`line()`], [`area`], [`point`], [`rect`], [`rule_x`], [`sector`] |
-//! | position adjustment | [`Stacking`], [`Mark::by_position`] (dodging) |
+//! | marks | [`bar`], [`line()`], [`area`], [`point`], [`rect`], [`rule_x`], [`band_x`], [`sector`] |
+//! | position adjustment | [`Stacking`], [`Mark::by_position`] (dodging), [`Mark::ridge`] |
 //! | scales | [`ScaleKind::Linear`], `Log`, `Power`, `Time`, `Band`, `Point` |
 //! | guides | [`AxisSpec`], [`LegendPosition`] |
 //! | coordinates | [`Coordinate::Cartesian`], [`Coordinate::polar`] |
@@ -82,7 +82,7 @@ pub use export::ChartExports;
 pub use layout::Insets;
 pub use mark::{
     Annotation, AnnotationPosition, Interpolation, Mark, MarkDimension, MarkKind, MarkStyle,
-    Stacking, Symbol, area, bar, line, point, rect, rule_x, rule_y, sector,
+    Stacking, Symbol, area, band_x, band_y, bar, line, point, rect, rule_x, rule_y, sector,
 };
 pub use scale::{BandPadding, Scale, ScaleKind, ScaleSpec};
 pub use style::{Chrome, categorical, diverging, sequential};
@@ -90,8 +90,8 @@ pub use ticks::Tick;
 
 use std::rc::Rc;
 
-use day_core::frame::{FrameClock, FrameHandle};
-use day_core::tween::{Timing, animate};
+use day_core::frame::FrameClock;
+use day_core::motion::{Animation, Playing};
 use day_core::{BuildCx, Piece, RNode};
 use day_pieces::{Decorated, Draw, IntoText, TextStyle};
 use day_reactive::Signal;
@@ -132,13 +132,64 @@ pub struct Chart {
     domain: Option<IntervalSelection>,
     transition: Option<AnimSpec>,
     appear: bool,
+    entrance: Entrance,
+    replay: Option<Replay>,
+    ridge_overlap: f64,
 }
 
-/// The transition [`Chart::animated`] uses: a spring that settles in about half a second with a
-/// trace of overshoot, quick enough to follow a slider and soft enough to read as the same data
-/// moving rather than a new chart appearing.
+/// How a chart arrives when its first appearance is animated ([`Chart::entrance`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Entrance {
+    /// The data arrives in an empty plot: bars and wedges grow from their baselines, areas and
+    /// ridges rise, a range is drawn out from its start with its end point riding it, and
+    /// lines and points fade in.
+    #[default]
+    Grow,
+    /// The finished chart is uncovered from the leading edge, the way a pen plotter draws a
+    /// series: the right entrance for a time series, which reads in that direction.
+    Sweep,
+}
+
+/// A handle that plays a chart's entrance again ([`Chart::replay`]).
+///
+/// It is a signal, so make it where the chart is built and keep a copy for the button:
+///
+/// ```ignore
+/// let replay = Replay::new();
+/// column((
+///     button("Replay").action(move || replay.play()),
+///     chart(marks).entrance(Entrance::Sweep).replay(replay),
+/// ))
+/// ```
+#[derive(Clone, Copy)]
+pub struct Replay(Signal<u64>);
+
+impl Replay {
+    /// A handle for the chart built next to it, owned by the current scope like any signal.
+    #[must_use]
+    pub fn new() -> Self {
+        Replay(Signal::new(0))
+    }
+
+    /// Play the entrance of every chart given this handle from its start. Data set in the
+    /// same turn is what arrives.
+    pub fn play(&self) {
+        self.0.update(|plays| *plays = plays.wrapping_add(1));
+    }
+}
+
+impl Default for Replay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The transition [`Chart::animated`] uses: a spring with a trace of overshoot, quick enough to
+/// follow a slider and soft enough to read as the same data moving rather than a new chart
+/// appearing. It is `AnimSpec::spring(0.6, 0.86)` spelled out so it can be a `const`: most of the
+/// move is over in half a second, and `duration_ms` is the spring's settle time.
 pub const DEFAULT_TRANSITION: AnimSpec = AnimSpec {
-    duration_ms: 600,
+    duration_ms: 842,
     delay_ms: 0,
     curve: day_spec::Curve::Spring {
         response: 0.6,
@@ -176,6 +227,9 @@ pub fn chart(marks: impl Fn() -> Vec<Mark> + 'static) -> Chart {
         domain: None,
         transition: None,
         appear: false,
+        entrance: Entrance::Grow,
+        replay: None,
+        ridge_overlap: 1.5,
     }
 }
 
@@ -284,6 +338,19 @@ impl Chart {
     /// Band padding for a discrete x scale.
     pub fn x_band_padding(mut self, p: BandPadding) -> Self {
         self.x_scale.padding = Some(p);
+        self
+    }
+
+    /// Band padding for a discrete y scale: the gaps between a heat map's rows.
+    pub fn y_band_padding(mut self, p: BandPadding) -> Self {
+        self.y_scale.padding = Some(p);
+        self
+    }
+    /// How many rows the tallest ridge spans ([`Mark::ridge`]). At 1 no ridge reaches past its
+    /// own row; the default, 1.5, lets the peaks overlap the row above, which is what makes a
+    /// ridgeline read as one landscape.
+    pub fn ridge_overlap(mut self, rows: f64) -> Self {
+        self.ridge_overlap = rows.max(0.1);
         self
     }
 
@@ -417,6 +484,21 @@ impl Chart {
             self.transition = Some(DEFAULT_TRANSITION);
         }
         self
+    }
+
+    /// Animate the chart's first appearance as `entrance` ([`Chart::animate_appearance`] is
+    /// this with [`Entrance::Grow`]).
+    pub fn entrance(mut self, entrance: Entrance) -> Self {
+        self.entrance = entrance;
+        self.animate_appearance()
+    }
+
+    /// Play the entrance again whenever `replay` is played: a Replay button, or a "new data"
+    /// button that wants its data to arrive the way the first did. Implies an animated
+    /// appearance.
+    pub fn replay(mut self, replay: Replay) -> Self {
+        self.replay = Some(replay);
+        self.animate_appearance()
     }
 
     // --- Everything else ---
@@ -634,7 +716,23 @@ struct Motion {
     /// The transition in flight, matched once when it started, and how far along it is.
     flight: Option<animate::Transition>,
     progress: f64,
-    handle: Option<FrameHandle>,
+    /// The animation driving `progress`. Stopped when a new transition replaces it and when the
+    /// chart's scope ends: dropping a [`Playing`] leaves the animation running.
+    playing: Option<Playing>,
+    /// The [`Replay`] count the last draw saw, so a new one is told from a re-record.
+    plays: u64,
+}
+
+/// How a chart's motion was configured, gathered so `motion_frame` takes one argument for it.
+#[derive(Clone, Copy)]
+struct MotionSpec {
+    /// The transition a change animates with; `None` draws every change at once.
+    spec: Option<AnimSpec>,
+    /// Whether the first appearance animates, and how.
+    appear: bool,
+    entrance: Entrance,
+    /// The chart's [`Replay`] count now.
+    plays: u64,
 }
 
 /// Decide what to draw this frame: start, retarget or finish a transition toward `target`.
@@ -642,54 +740,72 @@ fn motion_frame(
     motion: &Rc<std::cell::RefCell<Motion>>,
     target: resolve::Resolved,
     size: Size,
-    spec: Option<AnimSpec>,
-    appear: bool,
+    how: MotionSpec,
     clock: FrameClock,
     frame: day_reactive::Trigger,
 ) -> resolve::Resolved {
+    let MotionSpec {
+        spec,
+        appear,
+        entrance,
+        plays,
+    } = how;
     let mut m = motion.borrow_mut();
     let first = m.target.is_none();
     let changed = m.target.as_ref().is_some_and(|last| *last != target);
     let resized = m.size.is_some_and(|s| s != size);
+    // A replay is a first appearance again, whatever is on screen.
+    let replayed = !first && plays != m.plays;
+    m.plays = plays;
     if first || changed {
         m.target = Some(target.clone());
     }
     m.size = Some(size);
-    // A first appearance starts from the same chart with nothing in it, so every mark enters.
-    let start = if first && appear {
-        let mut empty = target.clone();
-        empty.marks.clear();
-        Some(empty)
+    let entering = appear && (first || replayed);
+    let start = if entering {
+        let mut before = target.clone();
+        match entrance {
+            // The same chart with nothing in it, so every mark enters.
+            Entrance::Grow => before.marks.clear(),
+            // The same chart, covered.
+            Entrance::Sweep => before.reveal = 0.0,
+        }
+        Some(before)
     } else {
         m.shown.clone()
     };
-    if changed || resized || (first && appear) {
-        if let Some(h) = m.handle.take() {
-            h.cancel();
+    if changed || resized || entering {
+        if let Some(playing) = m.playing.take() {
+            playing.stop();
         }
         m.flight = None;
-        if let (false, Some(spec), Some(shown)) = (resized, spec, start) {
+        if let (false, Some(spec), Some(shown)) = (resized && !entering, spec, start) {
             m.flight = Some(animate::Transition::new(shown, target.clone()));
             m.progress = 0.0;
-            // Weak, so the subscription does not keep its own chart alive: a chart removed
-            // mid-flight drops its `Motion`, and with it the handle, which cancels the frames.
+            // Weak, so the animation does not keep its own chart alive.
             let state = Rc::downgrade(motion);
-            m.handle = Some(animate(clock, Timing::new(spec), move |s| {
+            let playing = Animation::drive(spec, move |s| {
                 let Some(state) = state.upgrade() else {
                     return;
                 };
-                {
-                    let mut st = state.borrow_mut();
-                    st.progress = s.progress;
-                    // The subscription ends itself on the last sample; its handle stays in place
-                    // (cancelling from inside its own callback is not this closure's business)
-                    // until the next change replaces it.
-                    if s.done {
-                        st.flight = None;
-                    }
+                // Borrowed only while `start_on` below runs: under reduced motion it lands the
+                // animation at once, inside this draw, which then draws the target itself.
+                let Ok(mut st) = state.try_borrow_mut() else {
+                    return;
+                };
+                st.progress = s.progress;
+                if s.done {
+                    st.flight = None;
                 }
+                drop(st);
                 frame.notify();
-            }));
+            })
+            .start_on(clock);
+            if playing.is_running() {
+                m.playing = Some(playing);
+            } else {
+                m.flight = None;
+            }
         }
     }
     let shown = match &m.flight {
@@ -736,6 +852,7 @@ struct Spec {
     conditions: Vec<interaction::Condition>,
     filter: Option<Predicate>,
     domain: Option<IntervalSelection>,
+    ridge_overlap: f64,
 }
 
 /// One size's worth of the pipeline: the chart resolved for `size`, the legend that took its
@@ -747,6 +864,8 @@ struct Prepared {
     x_axis: AxisSpec,
     y_axis: AxisSpec,
     chrome: Chrome,
+    /// What a ridge hides the rows behind it with; `None` erases them (`render::Paint2::ground`).
+    ground: Option<day_spec::Ink>,
 }
 
 impl Spec {
@@ -831,6 +950,7 @@ impl Spec {
             font: self.font.clone(),
             legend_insets,
             plot_insets: self.plot_insets,
+            ridge_overlap: self.ridge_overlap,
         };
         let target = resolve::resolve(ms, size, &cfg);
         Prepared {
@@ -839,6 +959,7 @@ impl Spec {
             legend,
             x_axis,
             y_axis,
+            ground: chrome.plot_background,
             chrome,
         }
     }
@@ -851,6 +972,7 @@ impl Spec {
             x_axis: &prepared.x_axis,
             y_axis: &prepared.y_axis,
             series_colors: &*self.colors,
+            ground: prepared.ground,
         }
     }
 
@@ -913,6 +1035,9 @@ impl Piece for Chart {
             domain,
             transition,
             appear,
+            entrance,
+            replay,
+            ridge_overlap,
         } = self;
         let spec = Rc::new(Spec {
             marks,
@@ -933,6 +1058,7 @@ impl Piece for Chart {
             conditions,
             filter,
             domain,
+            ridge_overlap,
         });
 
         // The transition in flight, if any (README "Animation"). The draw closure starts one when
@@ -941,6 +1067,19 @@ impl Piece for Chart {
         let motion: Rc<std::cell::RefCell<Motion>> = Rc::default();
         let frame = day_reactive::Trigger::new();
         let clock = FrameClock::current();
+        // A transition plays on until stopped, so a chart removed mid-flight stops its own.
+        day_reactive::Scope::current().on_cleanup({
+            let motion = motion.clone();
+            move || {
+                if let Some(playing) = motion
+                    .try_borrow_mut()
+                    .ok()
+                    .and_then(|mut m| m.playing.take())
+                {
+                    playing.stop();
+                }
+            }
+        });
 
         // What the last draw positioned, for the pointer to hit (`select::HitModel`). Shared
         // between the draw closure that fills it and the gesture handlers that read it, so hit
@@ -1002,7 +1141,9 @@ impl Piece for Chart {
                         .chrome
                         .clone()
                         .unwrap_or_else(|| Chrome::for_dark(dark));
-                    let prepared = spec.prepare(size, chrome);
+                    let mut prepared = spec.prepare(size, chrome);
+                    // An export draws on its own white sheet, which erasing would cut through.
+                    prepared.ground = prepared.ground.or(Some(Color::WHITE.into()));
                     spec.draw(d, &prepared, &prepared.target, &bindings);
                 }),
             );
@@ -1029,9 +1170,14 @@ impl Piece for Chart {
                     &motion,
                     prepared.target.clone(),
                     size,
-                    // Ambient intent wins, as it does for native widgets.
-                    day_core::current_anim().or(transition),
-                    appear,
+                    MotionSpec {
+                        // Ambient intent wins, as it does for native widgets.
+                        spec: day_core::current_anim().or(transition),
+                        appear,
+                        entrance,
+                        // Read here, inside the binding, so playing it re-records the chart.
+                        plays: replay.map_or(0, |r| r.0.get()),
+                    },
                     clock,
                     frame,
                 );
@@ -1128,7 +1274,7 @@ impl Piece for Chart {
                             }
                             Interaction::Point(point) => point.activate(
                                 model.record_at(p, point.snap).map(|h| h.record),
-                                day_core::modifiers().shift,
+                                day_core::modifiers().shift(),
                             ),
                             Interaction::Brush(brush) => interaction::tap_brush(*brush, &model, p),
                             Interaction::Links(links) => {
@@ -1147,11 +1293,11 @@ impl Piece for Chart {
             });
         }
         if bindings_need_drag {
-            piece = piece.on_drag({
+            let on_drag = {
                 let hits = hits.clone();
                 let bindings = interactions.clone();
                 let sessions = sessions.clone();
-                move |drag| {
+                move |drag: day_pieces::Drag| {
                     let model = hits.borrow();
                     let mut sessions = sessions.borrow_mut();
                     for (i, binding) in bindings.iter().enumerate() {
@@ -1194,7 +1340,13 @@ impl Piece for Chart {
                         }
                     }
                 }
-            });
+            };
+            // A scrub along one axis takes only the drags along it, so inside a scroll view the
+            // swipe across it scrolls the page (README "Drags inside a scroll view").
+            piece = match interaction::drag_axis(&interactions) {
+                Some(axis) => piece.on_drag_along(axis, on_drag),
+                None => piece.on_drag(on_drag),
+            };
         }
         if bindings_need_viewport {
             piece = piece.on_pan({
@@ -1203,7 +1355,7 @@ impl Piece for Chart {
                 move |pan| {
                     for binding in bindings.iter() {
                         if let Interaction::Viewport(viewport) = binding {
-                            if day_core::modifiers().primary {
+                            if day_core::modifiers().primary() {
                                 interaction::zoom(
                                     viewport.parameter,
                                     &hits.borrow(),
@@ -1250,7 +1402,7 @@ impl Piece for Chart {
             piece = piece.on_key({
                 let bindings = interactions.clone();
                 move |key| {
-                    if key.key == "Escape" {
+                    if key.key == day_spec::Key::Escape {
                         for binding in bindings.iter() {
                             match binding {
                                 Interaction::Inspect(i) => {
@@ -1270,5 +1422,123 @@ impl Piece for Chart {
             piece = piece.context_menu(move || menu());
         }
         piece.build(cx)
+    }
+}
+
+#[cfg(test)]
+mod entrance_tests {
+    //! A chart's entrance and its replay (README "Animation"), driven the way the draw closure
+    //! drives them.
+
+    use super::*;
+    use day_pieces::prelude::{AnyPiece, Decorate as _, label};
+
+    /// The `const` spelling of the default transition is the spring it names, settle time and
+    /// all, so a repeat or a reversal of it has the length the framework gives that spring.
+    #[test]
+    fn default_transition_is_its_spring() {
+        assert_eq!(DEFAULT_TRANSITION, AnimSpec::spring(0.6, 0.86));
+    }
+
+    fn resolved(values: &[f64]) -> resolve::Resolved {
+        let (xs, ys) = (ScaleSpec::default(), ScaleSpec::default());
+        let (xa, ya) = (AxisSpec::default(), AxisSpec::default());
+        let colors = |i: usize, _: &str| style::categorical(i);
+        let cfg = resolve::Config {
+            x_scale: &xs,
+            y_scale: &ys,
+            x_axis: &xa,
+            y_axis: &ya,
+            coordinate: Coordinate::Cartesian,
+            series_colors: &colors,
+            label_size: 11.0,
+            font: CanvasFont::default(),
+            legend_insets: Insets::default(),
+            plot_insets: None,
+            ridge_overlap: 1.5,
+        };
+        let marks = values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| bar(value("Month", format!("M{i}")), value("Sales", *v)))
+            .collect();
+        resolve::resolve(marks, Size::new(400.0, 300.0), &cfg)
+    }
+
+    /// One draw of a chart whose data resolved to `target`, with `plays` replays so far.
+    fn draw(
+        motion: &Rc<std::cell::RefCell<Motion>>,
+        target: &resolve::Resolved,
+        entrance: Entrance,
+        plays: u64,
+    ) -> resolve::Resolved {
+        motion_frame(
+            motion,
+            target.clone(),
+            Size::new(400.0, 300.0),
+            MotionSpec {
+                spec: Some(DEFAULT_TRANSITION),
+                appear: true,
+                entrance,
+                plays,
+            },
+            FrameClock::current(),
+            day_reactive::Trigger::new(),
+        )
+    }
+
+    fn boot() {
+        day_core::uninstall_tree();
+        let (mock, _probe) = day_mock::MockToolkit::new();
+        day_core::launch_with(
+            mock,
+            day_spec::WindowOptions::default().size(400.0, 300.0),
+            || -> AnyPiece { label("fixture").any() },
+        );
+    }
+
+    #[test]
+    fn a_replay_starts_the_entrance_again_and_a_re_record_does_not() {
+        boot();
+        let target = resolved(&[3.0, 5.0]);
+        let motion: Rc<std::cell::RefCell<Motion>> = Rc::default();
+
+        // The first draw starts covered, and the transition is in flight.
+        let first = draw(&motion, &target, Entrance::Sweep, 0);
+        assert_eq!(first.reveal, 0.0);
+        assert!(motion.borrow().flight.is_some());
+
+        // Once it has landed, drawing the same chart again is the finished chart.
+        motion.borrow_mut().flight = None;
+        assert_eq!(draw(&motion, &target, Entrance::Sweep, 0).reveal, 1.0);
+        assert!(
+            motion.borrow().flight.is_none(),
+            "a re-record starts nothing"
+        );
+
+        // Playing it starts from covered again, with the same data.
+        let replayed = draw(&motion, &target, Entrance::Sweep, 1);
+        assert_eq!(replayed.reveal, 0.0);
+        assert_eq!(replayed.marks, target.marks);
+        assert!(motion.borrow().flight.is_some());
+    }
+
+    #[test]
+    fn a_replay_with_new_data_brings_the_new_data_in() {
+        boot();
+        let motion: Rc<std::cell::RefCell<Motion>> = Rc::default();
+        let before = resolved(&[3.0, 5.0]);
+        draw(&motion, &before, Entrance::Grow, 0);
+        motion.borrow_mut().flight = None;
+
+        // Growing in, every bar starts on its baseline, and what arrives is the new data.
+        let after = resolved(&[8.0, 2.0, 6.0]);
+        let start = draw(&motion, &after, Entrance::Grow, 1);
+        assert_eq!(start.marks.len(), 3);
+        assert!(
+            start.marks.iter().all(|p| p.v1 == 0.0),
+            "grown from nothing"
+        );
+        assert_eq!(motion.borrow().target.as_ref(), Some(&after));
     }
 }

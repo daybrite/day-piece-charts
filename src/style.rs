@@ -14,7 +14,7 @@
 //! (equal steps in the data are equal perceived steps in color) and monotone in lightness, so it
 //! survives being printed in grayscale. A rainbow ramp does neither, which is why it misleads.
 
-use day_spec::Color;
+use day_spec::{Color, Ink, Palette, SystemColor};
 
 fn rgb8(r: u8, g: u8, b: u8) -> Color {
     Color::rgb(
@@ -88,49 +88,84 @@ pub fn diverging(t: f64) -> Color {
 
 /// The chart's own chrome, so a chart reads on both grounds without the app restating it.
 /// Named fields per the API style rule.
+///
+/// Every field is an [`Ink`], so the default chrome follows the app's light and dark appearance
+/// with no rebuild: a live chart re-records when the appearance changes. Text uses the platform's
+/// secondary-text role; the hairlines, the raised surface and its shadow are light/dark pairs
+/// tuned for a plot. A chart given its own `Chrome` of fixed colors keeps them in both.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chrome {
-    pub axis_line: Color,
-    pub grid_line: Color,
-    pub tick: Color,
-    pub label: Color,
-    pub title: Color,
-    pub plot_background: Option<Color>,
+    pub axis_line: Ink,
+    pub grid_line: Ink,
+    pub tick: Ink,
+    pub label: Ink,
+    pub title: Ink,
+    pub plot_background: Option<Ink>,
+    /// The fill of what the chart raises over its marks: the selection's label box, an
+    /// annotation pill. Opaque, so the marks under it do not show through the text.
+    pub surface: Ink,
+    /// The color of the shadow those cast.
+    pub shadow: Ink,
 }
 
+/// Chart text: the platform's secondary text, which on Apple platforms is the single grey Swift
+/// Charts draws every piece of chart text in.
+const TEXT: Ink = Ink::system(SystemColor::SecondaryText);
+
 impl Chrome {
-    /// The chrome for a ground of the given darkness. Grid lines are faint: a grid is a reading
-    /// aid, and one that competes with the data for contrast is worse than none.
+    /// The chrome for a ground of the given darkness, in fixed colors: the default chrome
+    /// resolved against Day's own palette for that appearance. For a chart drawn on a ground
+    /// whose darkness is known ahead, such as an export onto white.
     ///
-    /// Labels and titles share one weight, at the platform's secondary-text alpha. Swift Charts
-    /// draws every piece of chart text at a single grey, measured at 154/255 on a dark ground;
-    /// two separate weights put Day's at 199 and 233, bright enough to compete with the marks.
-    /// The data is what should carry the contrast.
+    /// Grid lines are faint: a grid is a reading aid, and one that competes with the data for
+    /// contrast is worse than none. Labels and titles share one weight, the secondary-text
+    /// grey: two separate weights are bright enough to compete with the marks, and the data is
+    /// what should carry the contrast.
     pub fn for_dark(dark: bool) -> Self {
-        if dark {
-            Chrome {
-                axis_line: Color::rgba(1.0, 1.0, 1.0, 0.45),
-                grid_line: Color::rgba(1.0, 1.0, 1.0, 0.12),
-                tick: Color::rgba(1.0, 1.0, 1.0, 0.45),
-                label: Color::rgba(1.0, 1.0, 1.0, 0.55),
-                title: Color::rgba(1.0, 1.0, 1.0, 0.55),
-                plot_background: None,
-            }
-        } else {
-            Chrome {
-                axis_line: Color::rgba(0.0, 0.0, 0.0, 0.35),
-                grid_line: Color::rgba(0.0, 0.0, 0.0, 0.10),
-                tick: Color::rgba(0.0, 0.0, 0.0, 0.35),
-                label: Color::rgba(0.0, 0.0, 0.0, 0.6),
-                title: Color::rgba(0.0, 0.0, 0.0, 0.6),
-                plot_background: None,
-            }
+        Chrome::default().resolve(&Palette::fallback(dark))
+    }
+
+    /// This chrome with every ink resolved against `palette`: fixed colors for that appearance.
+    #[must_use]
+    pub fn resolve(&self, palette: &Palette) -> Self {
+        let fixed = |ink: Ink| Ink::Fixed(ink.resolve(palette));
+        Chrome {
+            axis_line: fixed(self.axis_line),
+            grid_line: fixed(self.grid_line),
+            tick: fixed(self.tick),
+            label: fixed(self.label),
+            title: fixed(self.title),
+            plot_background: self.plot_background.map(fixed),
+            surface: fixed(self.surface),
+            shadow: fixed(self.shadow),
         }
     }
 }
 
 impl Default for Chrome {
+    /// Chrome that follows the appearance.
     fn default() -> Self {
-        Chrome::for_dark(false)
+        Chrome {
+            axis_line: Ink::adaptive(
+                Color::rgba(0.0, 0.0, 0.0, 0.35),
+                Color::rgba(1.0, 1.0, 1.0, 0.45),
+            ),
+            grid_line: Ink::adaptive(
+                Color::rgba(0.0, 0.0, 0.0, 0.10),
+                Color::rgba(1.0, 1.0, 1.0, 0.12),
+            ),
+            tick: Ink::adaptive(
+                Color::rgba(0.0, 0.0, 0.0, 0.35),
+                Color::rgba(1.0, 1.0, 1.0, 0.45),
+            ),
+            label: TEXT,
+            title: TEXT,
+            plot_background: None,
+            surface: Ink::adaptive(Color::WHITE, Color::rgb(0.17, 0.17, 0.19)),
+            shadow: Ink::adaptive(
+                Color::rgba(0.0, 0.0, 0.0, 0.22),
+                Color::rgba(0.0, 0.0, 0.0, 0.55),
+            ),
+        }
     }
 }
